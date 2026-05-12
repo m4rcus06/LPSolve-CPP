@@ -81,7 +81,11 @@ public:
         for (int j = 0; j < cols; ++j) std::swap((*this)(r1, j), (*this)(r2, j));
     }
 
-
+    static Matrix<T> Identity(int n) {
+        Matrix<T> result(n, n);
+        for (int i = 0; i < n; ++i) result(i, i) = static_cast<T>(1);
+        return result;
+    }
 
     void display() {
         for (int i = 0; i < rows * cols; ++i) {
