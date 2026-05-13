@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <iomanip>
+#include <cassert>
+#include <cmath>
 #include "matrix.h"
 
 enum class Goal {
@@ -11,9 +13,15 @@ enum class Goal {
 };
 
 enum class Relation {
-    LESS_EQUAL,        //< Less or equal
-    GREATER_EQUAL,        //< Greater or equal
-    EQUAL          //< Equal
+    LESS_EQUAL,             //< Less or equal
+    GREATER_EQUAL,          //< Greater or equal
+    EQUAL,                  //< Equal
+};
+
+enum class varType {
+    POSITIVE,               //< >= 0
+    NEGATIVE,               //< <= 0
+    FREE                    //< any real numbers
 };
 
 template <typename T>
@@ -23,6 +31,8 @@ struct LinearProgram {
     Matrix<T> A;                        //Constraint matrix
     std::vector<T> b;                   //Right hand side values
     std::vector<Relation> relations;    //Relations type for each constraint
+    std::vector<varType> variableTypes; //Variables sign correspond to varType
+    std::vector<std::string> variableNames;
 
     int numVariables, numConstraints;
     LinearProgram(
@@ -30,14 +40,17 @@ struct LinearProgram {
             const std::vector<T>& objective,
             const Matrix<T>& constraints,
             const std::vector<T>& rhs,
-            const std::vector<Relation>& rels)
-    : goal(g), c(objective), A(constraints), b(rhs), relations(rels)
-    {
+            const std::vector<Relation>& rels,
+            const std::vector<varType>& types,
+            const std::vector<std::string>& labs)
+    : goal(g), c(objective), A(constraints), b(rhs), relations(rels), variableTypes(types), variableNames(labs) {
         numVariables = c.size();
         numConstraints = b.size();
         assert((int) A.rowSize() == numConstraints);
         assert((int) A.colSize() == numVariables);
         assert((int) relations.size() == numConstraints);
+        assert((int) variableTypes.size() == numVariables);
+        assert((int) variableNames.size() == numVariables);
     }
 
     /**
@@ -51,7 +64,21 @@ struct LinearProgram {
         return result;
     }
 
+    /**
+     * @brief add constraints
+     * */
+    void addConstraints(const std::vector<T>& coeff, T rhs, Relation rel) {
+        assert((int) coeff.size() == numVariables);
+        A.expandRow(coeff);
+        b.push_back(rhs);
+        relations.push_back(rel);
+        numConstraints = (int) b.size();
+    }
+
    void display() const {
+        size_t maxNameLen = 0;
+        for (const auto& name: variableNames) maxNameLen = std::max(maxNameLen, name.length());
+        int width = (int) maxNameLen;
         std::cout << std::fixed << std::setprecision(4);
         std::cout << "\n======================= Linear Program =========================\n";
 
@@ -62,15 +89,15 @@ struct LinearProgram {
             T val = c[j];
             if (j > 0) std::cout << (val >= 0 ? " + " : " - ");
             else if (val < 0) std::cout << "-";
-            else std::cout << " ";
 
-            std::cout << std::setw(8) << std::abs(val) << "*x" << j + 1;
+            std::cout << std::abs(val) << "*" << std::left << std::setw(maxNameLen) << variableNames[j] << "    ";
         }
         std::cout << "\n\nSubject to:\n";
 
         // 2. Print Constraints
+        int indentSize = 9;
         for (int i = 0; i < numConstraints; ++i) {
-            std::cout << "  ";
+            std::cout << std::string(indentSize, ' ');
             for (int j = 0; j < numVariables; ++j) {
                 T val = A(i, j);
                 if (j > 0) {
@@ -78,7 +105,7 @@ struct LinearProgram {
                 } else {
                     std::cout << (val < 0 ? "-" : " "); 
                 }
-                std::cout << std::setw(8) << std::abs(val) << "*x" << j + 1;
+                std::cout << std::setw(maxNameLen) << std::abs(val) << "*" << variableNames[j] << "    ";
             }
 
             // 3. Print Relation & RHS
@@ -87,15 +114,22 @@ struct LinearProgram {
                 case Relation::GREATER_EQUAL: std::cout << "  >=  "; break;
                 case Relation::EQUAL:         std::cout << "   =  "; break;
             }
-            std::cout << std::setw(10) << b[i] << "\n";
+            std::cout << std::setw(width) << b[i] << "\n";
         }
 
         // 4. Print Non-negativity
-        std::cout << "\n  Variables: ";
-        for (int j = 0; j < numVariables; ++j) {
-            std::cout << "x" << j + 1 << (j + 1 < numVariables ? ", " : "");    
+        std::cout << "\nVariables:\n";
+        for (int i = 0; i < numVariables; ++i) {
+            std::cout << " " << std::left << std::setw(maxNameLen + 2) << variableNames[i];
+            if (variableTypes[i] == varType::POSITIVE) {
+                std::cout << ">= 0";
+            } else if (variableTypes[i] == varType::NEGATIVE) {
+                std::cout << "<= 0";
+            } else {
+                std::cout << "free";
+            }
+            std::cout << std::endl;
         }
-        std::cout << " >= 0\n";
         std::cout << "================================================================\n" << std::endl;
     } 
 };

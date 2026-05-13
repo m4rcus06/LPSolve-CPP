@@ -31,7 +31,8 @@ int main() {
     };
 
     // 6. Khởi tạo Object LP
-    LinearProgram<double> testLP(myGoal, c, A, b, rels);
+    std::vector<varType> varTypes = {varType::POSITIVE, varType::NEGATIVE, varType::NEGATIVE};
+    LinearProgram<double> testLP(myGoal, c, A, b, rels, varTypes);
 
     // 7. Gọi hàm display của Hào
     testLP.display();
