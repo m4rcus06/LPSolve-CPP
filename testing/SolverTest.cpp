@@ -14,6 +14,7 @@ int main() {
     );
 
     Solver<double> sol(lp);
-    sol.display();
+    SolverStatus stats = sol.solve(PivotRule::DANTZIG);
+    sol.printSolution(stats);
     return 0;
 }

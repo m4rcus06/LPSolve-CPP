@@ -35,6 +35,7 @@ struct LinearProgram {
     std::vector<std::string> variableNames;
 
     int numVariables, numConstraints;
+    LinearProgram() {}
     LinearProgram(
             Goal g,
             const std::vector<T>& objective,
