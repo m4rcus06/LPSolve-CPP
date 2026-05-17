@@ -5,6 +5,7 @@
 #include "linear_program.h"
 #include <vector>
 #include <string>
+#include <limits>
 
 enum class SolverStatus {
     OPTIMAL,        //< Optimal solution found
@@ -38,6 +39,7 @@ private:
     int numConstraints;     //number of constrains
     int numTotalVars;       //toal variables count
     const T EPS = static_cast<T>(1e-9); //Precision
+    const T INF = std::numeric_limits<T>::max;
 
 
     std::vector<T> vecMul(const std::vector<T>& v, T k) {
@@ -129,8 +131,53 @@ private:
 
         return LP<T>(Goal::MIN, newC, newA, newB, newRelations, newVariableTypes, newVariableNames);
     }
+
+    //currently support Dantzig's rule and Bland's rule
+    int findPivotCol(PivotRule rule) {
+        int targetRow = numConstraints;
+        if (rule == PivotRule::DANTZIG) {
+            int bestCol = -1;
+            T minCoeff = -EPS;
+            for (int c = 0; c < numTotalVars; ++c) {
+                if (tableau(targetRow, c) < minCoeff) {
+                    minCoeff = tableau(targetRow, c); 
+                    bestCol = c;
+                }
+            }
+            return bestCol;
+        }
+
+        //BLAND
+        for (const auto& m: mappings) {
+            if (m.positiveCol != -1 && tableau(targetRow, m.positiveCol) < -EPS) return m.positiveCol;
+            if (m.negativeCol != -1 && tableau(targetRow, m.negativeCol) < -EPS) return m.negativeCol;
+        }
+
+        int slackStart = lp.numVariables;
+        for (int i = slackStart; i < numTotalVars; ++i) {
+            if (tableau(targetRow, i) < -EPS) return i;
+        }
+        //not found
+        return -1;
+    }
+
+    int findPivotRow(int pCol) {
+        int bestRow = -1;
+        T minRatio = -1;
+        for (int r = 0; r < numConstraints; ++r) {
+            T val = tableau(i, pCol);
+            if (val > EPS) {
+            }
+        }
+    }
+
+    void pivot(int r, int c) {
+        T pVal = tableau(r, c);
+        tableau.multiplyRow(r, static_cast<T>(1) / pVal);
+    }
 public:
-    Solver(const LP<T>& inputLP): originalLP(inputLP), lp(this->normalize(inputLP)) {
+    Solver(const LP<T>& inputLP): originalLP(inputLP) {
+        this->lp = this->normalize(originalLP);
         numConstraints = lp.numConstraints;
         numTotalVars = lp.numConstraints + lp.numVariables;
         tableau = Matrix<T>(numConstraints + 1, numTotalVars + 1);
