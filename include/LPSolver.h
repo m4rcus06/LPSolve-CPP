@@ -190,7 +190,7 @@ private:
             T val = tableau(r, pCol);
             if (val > EPS) {
                 T ratio = tableau(r, rhsCol) / val;
-                if (bestRow == -1 || minRatio + EPS > ratio) {
+                if (bestRow == -1 || minRatio - EPS > ratio) {
                     bestRow = r;
                     minRatio = ratio;
                 } else if (std::abs(minRatio - ratio) < EPS) {
@@ -228,23 +228,20 @@ public:
     }
 
     /**
-     * @brief Hiển thị bài toán dưới dạng Từ vựng (Dictionary Form) chuẩn grid căn lề
-     */
-    /**
-     * @brief Hiển thị bài toán dưới dạng Từ vựng (Dictionary Form) với độ chính xác 3 chữ số
+     * @brief Dictionary form display, 3-digits precision
      */
     void displayDictionary() const {
         std::cout << "\n==================== CURRENT DICTIONARY =======================\n";
-        std::cout << std::fixed << std::setprecision(3); // Thiết lập 3 chữ số thập phân
+        std::cout << std::fixed << std::setprecision(3);
 
-        // 1. Helper lấy tên biến
+        // varName helper
         auto getVarName = [&](int j) -> std::string {
             if (j == lp.numVariables + numConstraints) return "x0";
             if (j < lp.numVariables) return lp.variableNames[j];
             return "w" + std::to_string(j - lp.numVariables + 1);
         };
 
-        // 2. Phân loại biến cơ sở và biến tự do
+        // Mark basis variables, free variables
         std::vector<bool> isBasis(numTotalVars, false);
         for (int r = 0; r < numConstraints; ++r) {
             isBasis[basis[r]] = true;
@@ -255,20 +252,20 @@ public:
             if (!isBasis[j]) nonBasicVars.push_back(j);
         }
 
-        // 3. TÍNH TOÁN ĐỘ RỘNG CỘT TỰ ĐỘNG THEO PRECISION mới
+        // Column width calculating
         std::vector<int> colWidths(numTotalVars, 0);
         for (int j : nonBasicVars) {
             size_t maxW = 0;
             std::string name = getVarName(j);
             
-            // Đo dòng Z
+            // Z
             T zCoeff = tableau(numConstraints, j);
             if (std::abs(zCoeff) > EPS) {
                 std::stringstream ss;
                 ss << " + " << std::fixed << std::setprecision(3) << std::abs(zCoeff) << "*" << name;
                 maxW = std::max(maxW, ss.str().length());
             }
-            // Đo các dòng ràng buộc
+            // constraints
             for (int r = 0; r < numConstraints; ++r) {
                 T cCoeff = -tableau(r, j);
                 if (std::abs(cCoeff) > EPS) {
@@ -280,7 +277,7 @@ public:
             colWidths[j] = static_cast<int>(maxW);
         }
 
-        // 4. IN DÒNG HÀM MỤC TIÊU Z
+        // Print Z
         T zConst = -tableau(numConstraints, numTotalVars);
         if (std::abs(zConst) < EPS) zConst = static_cast<T>(0);
 
@@ -303,7 +300,7 @@ public:
         }
         std::cout << "\n\nSubject to:\n";
 
-        // 5. IN CÁC DÒNG RÀNG BUỘC
+        // Print constraints
         for (int i = 0; i < numConstraints; ++i) {
             int basisVarIdx = basis[i];
             T rConst = tableau(i, numTotalVars);
@@ -406,6 +403,7 @@ public:
             return SolverStatus::INFEASIBLE;
         }
 
+        //remove any row that is a linear combination of other
         std::vector<bool> isRedundant(numConstraints, false);
         int redundantCount = 0;
 
@@ -426,10 +424,6 @@ public:
                     redundantCount++;
                 }
             }
-        }
-
-        if (redundantCount > 0) {
-            std::cout << "\n[Phát hiện] Có " << redundantCount << " ràng buộc phụ thuộc tuyến tính dư thừa. Tiến hành loại bỏ!\n";
         }
 
         /*========================== PHASE 2 ========================================*/
@@ -478,8 +472,8 @@ public:
     }
 
     /**
-     * @brief Xuất kết quả nghiệm tối ưu và kết luận bài toán
-     * @param status Trạng thái trả về từ hàm solve()
+     * @brief Print solution 
+     * @param status: LP status from solve
      */
     void printSolution(SolverStatus status) const {
         std::cout << "\n==================== KẾT LUẬN NGHIỆM =======================\n";
@@ -492,6 +486,11 @@ public:
         
         if (status == SolverStatus::UNBOUNDED) {
             std::cout << "Bài toán KHÔNG GIỚI NỘI\n";
+            if (this->originalLP.goal == Goal::MAX) {
+                std::cout << "Giá trị tối ưu: inf" << '\n';
+            } else {
+                std::cout << "Giá trị tối ưu: -inf" << '\n';
+            }
             std::cout << "============================================================\n";
             return;
         }
@@ -502,11 +501,9 @@ public:
             return;
         }
 
-        // TRƯỜNG HỢP: OPTIMAL
-        std::cout << "Bài toán đạt PHƯƠNG ÁN TỐI ƯU:\n\n";
+        std::cout << "Bài toán có NGHIỆM TỐI ƯU:\n\n";
         std::cout << std::fixed << std::setprecision(3);
 
-        // Hàm helper để trích xuất giá trị hiện tại của một cột bất kỳ trong bảng
         auto getColValue = [&](int col) -> T {
             if (col == -1) return static_cast<T>(0);
             for (int r = 0; r < numConstraints; ++r) {
@@ -518,7 +515,6 @@ public:
             return static_cast<T>(0); // Nếu là biến tự do thì giá trị bằng 0
         };
 
-        // Khôi phục giá trị các biến gốc từ mảng mappings
         std::vector<T> xOriginal(originalLP.numVariables, static_cast<T>(0));
         
         for (int i = 0; i < originalLP.numVariables; ++i) {
@@ -528,12 +524,11 @@ public:
             if (originalLP.variableTypes[i] == varType::POSITIVE) {
                 xOriginal[i] = posVal;
             } else if (originalLP.variableTypes[i] == varType::NEGATIVE) {
-                xOriginal[i] = -negVal; // Đổi lại dấu gốc nếu là biến âm
+                xOriginal[i] = -negVal; // if negative, we flip sign
             } else { 
                 xOriginal[i] = posVal - negVal; // Biến tự do: x = x' - x''
             }
             
-            // In ra tên biến gốc và giá trị tối ưu của nó
             std::cout << "  * " << std::left << std::setw(8) << originalLP.variableNames[i] << " = " << xOriginal[i] << "\n";
         }
 
