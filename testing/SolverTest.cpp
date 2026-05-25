@@ -2,19 +2,24 @@
 #include "../include/linear_program.h"
 #include "../include/LPSolver.h"
 
-int main() {
-    LinearProgram<double> lp(
-        Goal::MAX,
-        {3, 2, -1},
-        Matrix<double>{{1, -2, 3}, {2, 1, -1}, {1, 1, 1}},
-        {4, 5, 6},
-        {Relation::LESS_EQUAL, Relation::GREATER_EQUAL, Relation::EQUAL},
-        {varType::POSITIVE, varType::FREE, varType::NEGATIVE},
-        {"x1", "x2", "x3"}
-    );
-
+template <typename T>
+void solve(const LinearProgram<T>& lp) {
     Solver<double> sol(lp);
     SolverStatus stats = sol.solve(PivotRule::DANTZIG);
     sol.printSolution(stats);
+}
+
+int main() {
+    LinearProgram<double> lp(
+        Goal::MAX,
+        {-1, -3, -1},
+        Matrix<double>{{2, -5, 1}, {2, -1, 2}},
+        {-5, 4},
+        {Relation::LESS_EQUAL, Relation::LESS_EQUAL},
+        {varType::POSITIVE, varType::POSITIVE, varType::POSITIVE},
+        {"x1", "x2", "x3"}
+    );
+
+    solve<double>(lp);
     return 0;
 }

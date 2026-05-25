@@ -35,9 +35,10 @@ private:
     LP<T> originalLP;       //< input LP
     LP<T> lp;               //normalized
     Matrix<T> tableau;      //LP Table
-    std::vector <int> basis;     //store basis indices
+    std::vector<int> basis;     //store basis indices
     int numConstraints;     //number of constrains
     int numTotalVars;       //toal variables count
+    std::vector<std::vector<T>> varCoords;  //store variable's coordinates
     const T EPS = static_cast<T>(1e-9); //Precision
     const T INF = std::numeric_limits<T>::max();
 
@@ -218,6 +219,33 @@ private:
         }
         basis[r] = c;
     }
+
+    std::vector<T> getCoords() const {
+        auto getColValue = [&](int col) -> T {
+            if (col == -1) return static_cast<T>(0);
+            for (int r = 0; r < numConstraints; ++r) {
+                if (basis[r] == col) {
+                    T val = tableau(r, numTotalVars);
+                    return (std::abs(val) < EPS) ? static_cast<T>(0) : val;
+                }
+            }
+            return static_cast<T>(0);
+        };
+
+        std::vector<T> curX(originalLP.numVariables, static_cast<T>(0));
+        for (int i = 0; i < originalLP.numVariables; ++i) {
+            T posVal = (mappings[i].positiveCol != -1) ? getColValue(mappings[i].positiveCol) : static_cast<T>(0);
+            T negVal = (mappings[i].negativeCol != -1) ? getColValue(mappings[i].negativeCol) : static_cast<T>(0);
+            if (originalLP.variableTypes[i] == varType::POSITIVE) {
+                curX[i] = posVal;
+            } else if (originalLP.variableTypes[i] == varType::NEGATIVE) {
+                curX[i] = -negVal;
+            } else {
+                curX[i] = posVal - negVal;
+            }
+        }
+        return curX;
+    }
 public:
     Solver(const LP<T>& inputLP): originalLP(inputLP) {
         this->lp = this->normalize(originalLP);
@@ -321,11 +349,14 @@ public:
             }
             std::cout << "\n";
         }
-        std::cout << "===============================================================\n";
+        std::cout << "===============================================================\n\n";
     }
 
     SolverStatus runSimplex(PivotRule rule) {
+        int cnt = 0;
         while (true) {
+            varCoords.push_back(getCoords());
+            std::cout << "Iteration #" << ++cnt;
             displayDictionary();
             int pCol = findPivotCol(rule);
             if (pCol == -1) {
@@ -471,6 +502,10 @@ public:
         return runSimplex(rule);
     }
 
+    std::vector<std::vector<T>> getPath() const {
+        return this->varCoords;
+    }
+
     /**
      * @brief Print solution 
      * @param status: LP status from solve
@@ -504,31 +539,8 @@ public:
         std::cout << "Bài toán có NGHIỆM TỐI ƯU:\n\n";
         std::cout << std::fixed << std::setprecision(3);
 
-        auto getColValue = [&](int col) -> T {
-            if (col == -1) return static_cast<T>(0);
-            for (int r = 0; r < numConstraints; ++r) {
-                if (basis[r] == col) {
-                    T val = tableau(r, numTotalVars);
-                    return (std::abs(val) < EPS) ? static_cast<T>(0) : val;
-                }
-            }
-            return static_cast<T>(0); // Nếu là biến tự do thì giá trị bằng 0
-        };
-
-        std::vector<T> xOriginal(originalLP.numVariables, static_cast<T>(0));
-        
+        std::vector<T> xOriginal = getCoords();
         for (int i = 0; i < originalLP.numVariables; ++i) {
-            T posVal = (mappings[i].positiveCol != -1) ? getColValue(mappings[i].positiveCol) : static_cast<T>(0);
-            T negVal = (mappings[i].negativeCol != -1) ? getColValue(mappings[i].negativeCol) : static_cast<T>(0);
-
-            if (originalLP.variableTypes[i] == varType::POSITIVE) {
-                xOriginal[i] = posVal;
-            } else if (originalLP.variableTypes[i] == varType::NEGATIVE) {
-                xOriginal[i] = -negVal; // if negative, we flip sign
-            } else { 
-                xOriginal[i] = posVal - negVal; // Biến tự do: x = x' - x''
-            }
-            
             std::cout << "  * " << std::left << std::setw(8) << originalLP.variableNames[i] << " = " << xOriginal[i] << "\n";
         }
 
