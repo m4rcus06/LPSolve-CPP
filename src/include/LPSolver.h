@@ -326,7 +326,7 @@ public:
                 if (colWidths[j] > 0) std::cout << std::string(colWidths[j] + 2, ' ');
             }
         }
-        std::cout << "\n\nSubject to:\n";
+        std::cout << "\n\nSubject to:" << std::endl;
 
         // Print constraints
         for (int i = 0; i < numConstraints; ++i) {
@@ -548,6 +548,7 @@ public:
         for (int i = 0; i < originalLP.numVariables; ++i) {
             zOptimal += originalLP.c[i] * xOriginal[i];
         }
+        zOptimal += originalLP.objectiveConstant;
 
         std::cout << "\n--> Giá trị tối ưu hàm mục tiêu: " 
                   << (originalLP.goal == Goal::MAX ? "Max Z" : "Min Z") << " = " << zOptimal << "\n";

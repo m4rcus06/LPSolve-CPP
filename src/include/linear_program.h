@@ -28,6 +28,7 @@ template <typename T>
 struct LinearProgram {
     Goal goal;
     std::vector<T> c;                   //Objective coefficients
+    T objectiveConstant;                 //Constant term in objective function
     Matrix<T> A;                        //Constraint matrix
     std::vector<T> b;                   //Right hand side values
     std::vector<Relation> relations;    //Relations type for each constraint
@@ -35,7 +36,7 @@ struct LinearProgram {
     std::vector<std::string> variableNames;
 
     int numVariables, numConstraints;
-    LinearProgram() {}
+    LinearProgram() : objectiveConstant(static_cast<T>(0)) {}
     LinearProgram(
             Goal g,
             const std::vector<T>& objective,
@@ -43,8 +44,9 @@ struct LinearProgram {
             const std::vector<T>& rhs,
             const std::vector<Relation>& rels,
             const std::vector<varType>& types,
-            const std::vector<std::string>& labs)
-    : goal(g), c(objective), A(constraints), b(rhs), relations(rels), variableTypes(types), variableNames(labs) {
+            const std::vector<std::string>& labs,
+            T objConst = static_cast<T>(0))
+    : goal(g), c(objective), objectiveConstant(objConst), A(constraints), b(rhs), relations(rels), variableTypes(types), variableNames(labs) {
         numVariables = c.size();
         numConstraints = b.size();
         assert((int) A.rowSize() == numConstraints);
@@ -92,6 +94,10 @@ struct LinearProgram {
             else if (val < 0) std::cout << "-";
 
             std::cout << std::abs(val) << "*" << std::left << std::setw(maxNameLen) << variableNames[j] << "    ";
+        }
+        if (std::abs(objectiveConstant) > 1e-9) {
+            if (objectiveConstant >= 0) std::cout << " + " << objectiveConstant;
+            else std::cout << " - " << std::abs(objectiveConstant);
         }
         std::cout << "\n\nSubject to:\n";
 
