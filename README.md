@@ -7,7 +7,7 @@ Giao diện đồ họa (GUI) hỗ trợ giải bài toán **Quy hoạch Tuyến
 ## Cấu trúc dự án
 
 ```
-myProject/
+LPSolver-CPP/
 ├── LPSolver.bat          # File chạy CHÍNH - Double-click để khởi động
 ├── install.bat           # Script cài đặt và biên dịch
 ├── README.md             # Tài liệu hướng dẫn
@@ -34,10 +34,10 @@ myProject/
 - Ma trận ràng buộc với các quan hệ: ≤, ≥, =
 - Loại biến: ≥0, ≤0, Free (không giới hạn)
 - Tối ưu hóa: Min / Max
-- Luật chọn pivot: Dantzig / Bland
+- Luật chọn phương pháp xoay: Dantzig / Bland
 
 ### 2. Giải bài toán
-- Thuật toán Simplex hai pha (Two-Phase Simplex Method)
+- Thuật toán đơn hình hai pha (Two-Phase Simplex Method)
 - Phát hiện tự động: nghiệm tối ưu (OPTIMAL), vô nghiệm (INFEASIBLE), không giới nội (UNBOUNDED), rơi vào vòng lặp (CYCLING)
 - Hiển thị nghiệm tối ưu và giá trị hàm mục tiêu
 
@@ -50,6 +50,11 @@ myProject/
 - Hiển thị đường đi qua các đỉnh
 - Đánh dấu điểm bắt đầu, trung gian và điểm tối ưu
 
+### 5. Giải thuật
+- Chuẩn hóa bài toán về dạng tìm min của hàm mục tiêu
+- Chuẩn hóa các biến về dạng không âm, với biến tự do thì biểu diễn nó dưới dạng hiệu của 2 biến không âm
+- Chuẩn hóa dấu của các ràng buộc về dạng <=
+- Biểu diễn bài toán dưới dạng bảng (ma trận / matrix) để thực hiện các phép xoay
 ---
 
 ## Hướng dẫn cài đặt & sử dụng
@@ -106,9 +111,13 @@ s.t.    2x₁ + x₂ ≤ 4
 
 | Thành phần | Công nghệ | Đóng góp |
 |------------|-----------|-----------|
-| **Core Solver** | C++17 | Thiết kế kiến trúc, giải thuật Simplex, xử lý ma trận, testing - *Do cá nhân lên ý tưởng, với sự hỗ trợ của Gemini AI trong tác vụ debug, kiểm tra logic* |
-| **Graphical Interface** | Python / Tkinter | Phát triển GUI, trực quan hóa, tương tác người dùng - *bởi Cursor AI* |
+| **Giải thuật** | C++17 | Thiết kế kiến trúc, giải thuật Simplex, xử lý ma trận, testing - *Do cá nhân lên ý tưởng, với sự hỗ trợ của Gemini AI trong tác vụ debug, kiểm tra logic* |
+| **Giao diện** | Python / Tkinter | Phát triển GUI, trực quan hóa, tương tác người dùng - *bởi Cursor AI* |
 
+## Tài liệu tham khảo
+1. Lý thuyết
+Phan Quốc Khánh & Trần Huệ Nương (20XX). Quy hoạch tuyến tính. NXB Giáo dục Việt Nam. (Tài liệu nền tảng cho thuật toán Simplex).
+Dantzig, G. B. (1963). Linear Programming and Extensions. Princeton University Press. (Nguồn gốc lịch sử và lý thuyết toán học của thuật toán Simplex).
 ---
 
 ## Giấy phép
