@@ -28,8 +28,8 @@ myProject/
 ## Tính năng chính
 
 ### 1. Nhập bài toán Quy hoạch Tuyến tính tổng quát
-- Số biến: 1 - 20
-- Số ràng buộc: 1 - 20
+- Số biến: 1 - 20 (Do giới hạn UI)
+- Số ràng buộc: 1 - 20 (Do giới hạn UI)
 - Hệ số hàm mục tiêu và hệ số tự do
 - Ma trận ràng buộc với các quan hệ: ≤, ≥, =
 - Loại biến: ≥0, ≤0, Free (không giới hạn)
@@ -38,7 +38,7 @@ myProject/
 
 ### 2. Giải bài toán
 - Thuật toán Simplex hai pha (Two-Phase Simplex Method)
-- Phát hiện tự động: nghiệm tối ưu (OPTIMAL), vô nghiệm (INFEASIBLE), không giới nội (UNBOUNDED)
+- Phát hiện tự động: nghiệm tối ưu (OPTIMAL), vô nghiệm (INFEASIBLE), không giới nội (UNBOUNDED), rơi vào vòng lặp (CYCLING)
 - Hiển thị nghiệm tối ưu và giá trị hàm mục tiêu
 
 ### 3. Hiển thị Dictionary Form
@@ -106,7 +106,7 @@ s.t.    2x₁ + x₂ ≤ 4
 
 | Thành phần | Công nghệ | Đóng góp |
 |------------|-----------|-----------|
-| **Core Solver** | C++17 | Thiết kế kiến trúc, giải thuật Simplex, xử lý ma trận, testing - *với sự hỗ trợ của Gemini AI* |
+| **Core Solver** | C++17 | Thiết kế kiến trúc, giải thuật Simplex, xử lý ma trận, testing - *Do cá nhân lên ý tưởng, với sự hỗ trợ của Gemini AI trong tác vụ debug, kiểm tra logic* |
 | **Graphical Interface** | Python / Tkinter | Phát triển GUI, trực quan hóa, tương tác người dùng - *bởi Cursor AI* |
 
 ---
