@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <limits>
+#include <set>
 
 enum class SolverStatus {
     OPTIMAL,        //< Optimal solution found
@@ -43,6 +44,7 @@ private:
     std::vector<std::vector<T>> pathHistory;  //store path for GUI visualization
     const T EPS = static_cast<T>(1e-9); //Precision
     const T INF = std::numeric_limits<T>::max();
+    std::set<std::string> visitedBases;  //for cycling detection
 
 
     std::vector<T> vecMul(const std::vector<T>& v, T k) {
@@ -366,7 +368,20 @@ public:
     SolverStatus runSimplex(PivotRule rule) {
         int cnt = 0;
         pathHistory.clear();
+        visitedBases.clear();
         while (true) {
+            // Cycling detection: encode current basis as string
+            std::string basisKey;
+            for (int b : basis) {
+                basisKey += std::to_string(b) + ",";
+            }
+            
+            if (visitedBases.find(basisKey) != visitedBases.end()) {
+                std::cout << "\n  >> Phat hien vong lap, tien hanh giai bang BLAND.\n";
+                return SolverStatus::CYCLING;
+            }
+            visitedBases.insert(basisKey);
+            
             pathHistory.push_back(getCoords());
             std::cout << "\n[ Iteration #" << cnt + 1 << " ]\n";
             ++cnt;
@@ -397,7 +412,15 @@ public:
         
         if (Phase1 == false) {
             this->initTableau();
-            return runSimplex(rule);
+            SolverStatus status = runSimplex(rule);
+            
+            // If cycling detected, retry with Bland's rule
+            if (status == SolverStatus::CYCLING) {
+                std::cout << "\n  >> Retrying with Bland's rule...\n";
+                this->initTableau();
+                status = runSimplex(PivotRule::BLAND);
+            }
+            return status;
         }
 
         /*===================== PHASE 1 =============================*/
@@ -515,7 +538,23 @@ public:
             }
         }
 
-        return runSimplex(rule);
+        SolverStatus status = runSimplex(rule);
+        
+        // If cycling detected in Phase 2, retry entire solve with Bland's rule
+        if (status == SolverStatus::CYCLING) {
+            std::cout << "\n  >> Phat hien vong lap o Phase 2, tien hanh giai lai bang BLAND.\n";
+            this->initTableau();
+            status = runSimplex(PivotRule::BLAND);
+            
+            // Handle Phase 1 if needed (re-check)
+            for (int i = 0; i < this->numConstraints; ++i) {
+                if (this->lp.b[i] < -EPS) {
+                    std::cout << "\n  !! Bland's rule also failed Phase 1! Problem may be inherently unstable.\n";
+                    break;
+                }
+            }
+        }
+        return status;
     }
 
     std::vector<std::vector<T>> getPath() const {
