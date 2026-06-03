@@ -64,21 +64,6 @@ public:
         for (int j = 0; j < cols; ++j) (*this)(to, j) += k * (*this)(from, j);
     }
 
-    /**
-     * @brief add one row to this matrix
-     * */
-    void expandRow(const std::vector<T>& v) {
-        if (this->empty()) {
-            this->setCol((int) v.size());
-        }
-
-        assert((int) v.size() <= this->colSize());
-        data.emplace_back(v);
-        while ((int) data.back().size() < this->colSize()) data.back().push_back(static_cast<T>(0));
-        if (this->rowSize() == 0) this->setCol(data.back().size());
-        this->setRow(this->rowSize() + 1);
-    }
-
     static Matrix<T> toMatrix(const std::vector<std::vector<T>>& raw_data) {
         int r = (int) raw_data.size();
         int c = (r > 0) ? (int) raw_data[0].size() : 0;

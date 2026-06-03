@@ -974,7 +974,6 @@ class LinearProgrammingGUI:
             ax.set_xlim(x_min, x_max)
             ax.set_ylim(y_min, y_max)
             ax.grid(True, alpha=0.3)
-            ax.legend(loc='upper right', fontsize=8)
             ax.set_aspect('equal')
             
             canvas = FigureCanvasTkAgg(fig, master=self.viz_frame)

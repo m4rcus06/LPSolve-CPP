@@ -67,17 +67,6 @@ struct LinearProgram {
         return result;
     }
 
-    /**
-     * @brief add constraints
-     * */
-    void addConstraints(const std::vector<T>& coeff, T rhs, Relation rel) {
-        assert((int) coeff.size() == numVariables);
-        A.expandRow(coeff);
-        b.push_back(rhs);
-        relations.push_back(rel);
-        numConstraints = (int) b.size();
-    }
-
    void display() const {
         // Helper: format number - no decimal for integers, 4 decimals for floats
         auto formatNum = [](T val, int prec = 4) -> std::string {
