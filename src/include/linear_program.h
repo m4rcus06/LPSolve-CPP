@@ -79,10 +79,21 @@ struct LinearProgram {
     }
 
    void display() const {
+        // Helper: format number - no decimal for integers, 4 decimals for floats
+        auto formatNum = [](T val, int prec = 4) -> std::string {
+            if (std::abs(val) < static_cast<T>(1e-9)) val = static_cast<T>(0);
+            if (std::abs(val - std::round(val)) < static_cast<T>(1e-6)) {
+                return std::to_string(static_cast<long long>(std::round(val)));
+            }
+            std::stringstream ss;
+            ss << std::fixed << std::setprecision(prec) << val;
+            return ss.str();
+        };
+        
         size_t maxNameLen = 0;
         for (const auto& name: variableNames) maxNameLen = std::max(maxNameLen, name.length());
         int width = (int) maxNameLen;
-        std::cout << std::fixed << std::setprecision(4);
+        
         std::cout << "\n======================= Linear Program =========================\n";
 
         // 1. Print Objective Function
@@ -93,11 +104,11 @@ struct LinearProgram {
             if (j > 0) std::cout << (val >= 0 ? " + " : " - ");
             else if (val < 0) std::cout << "-";
 
-            std::cout << std::abs(val) << "*" << std::left << std::setw(maxNameLen) << variableNames[j] << "    ";
+            std::cout << formatNum(std::abs(val)) << "*" << std::left << std::setw(maxNameLen) << variableNames[j] << "    ";
         }
         if (std::abs(objectiveConstant) > 1e-9) {
-            if (objectiveConstant >= 0) std::cout << " + " << objectiveConstant;
-            else std::cout << " - " << std::abs(objectiveConstant);
+            if (objectiveConstant >= 0) std::cout << " + " << formatNum(objectiveConstant);
+            else std::cout << " - " << formatNum(std::abs(objectiveConstant));
         }
         std::cout << "\n\nSubject to:\n";
 
@@ -112,7 +123,7 @@ struct LinearProgram {
                 } else {
                     std::cout << (val < 0 ? "-" : " "); 
                 }
-                std::cout << std::setw(maxNameLen) << std::abs(val) << "*" << variableNames[j] << "    ";
+                std::cout << std::setw(maxNameLen) << formatNum(std::abs(val)) << "*" << variableNames[j] << "    ";
             }
 
             // 3. Print Relation & RHS
@@ -121,7 +132,7 @@ struct LinearProgram {
                 case Relation::GREATER_EQUAL: std::cout << "  >=  "; break;
                 case Relation::EQUAL:         std::cout << "   =  "; break;
             }
-            std::cout << std::setw(width) << b[i] << "\n";
+            std::cout << std::setw(width) << formatNum(b[i]) << "\n";
         }
 
         // 4. Print Non-negativity

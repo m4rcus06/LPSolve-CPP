@@ -11,6 +11,7 @@ enum class SolverStatus {
     OPTIMAL,        //< Optimal solution found
     INFEASIBLE,     //< No feasible solution exists
     UNBOUNDED,      //< Objective function can be increased infinitely
+    CYCLING,        //< Solver is cycling (no progress)
     RUNNING         //< Solver still running
 };
 
@@ -39,6 +40,7 @@ private:
     int numConstraints;     //number of constrains
     int numTotalVars;       //toal variables count
     std::vector<std::vector<T>> varCoords;  //store variable's coordinates
+    std::vector<std::vector<T>> pathHistory;  //store path for GUI visualization
     const T EPS = static_cast<T>(1e-9); //Precision
     const T INF = std::numeric_limits<T>::max();
 
@@ -130,7 +132,7 @@ private:
 
         Matrix<T> newA = Matrix<T>::toMatrix(rows);
 
-        return LP<T>(Goal::MIN, newC, newA, newB, newRelations, newVariableTypes, newVariableNames);
+        return LP<T>(Goal::MIN, newC, newA, newB, newRelations, newVariableTypes, newVariableNames, inputLP.objectiveConstant);
     }
 
     void initTableau() {
@@ -256,11 +258,26 @@ public:
     }
 
     /**
-     * @brief Dictionary form display, 3-digits precision
+     * @brief Dictionary form display - clean, aligned output
      */
     void displayDictionary() const {
-        std::cout << "\n==================== CURRENT DICTIONARY =======================\n";
-        std::cout << std::fixed << std::setprecision(3);
+        int screenWidth = 100;
+        int separatorLen = screenWidth - 4;
+        
+        std::string sep(separatorLen, '=');
+        
+        std::cout << "\n" << sep << "\n";
+
+        // Helper: format number - no decimal for integers, 3 decimals for floats
+        auto formatNum = [](T val) -> std::string {
+            if (std::abs(val) < static_cast<T>(1e-9)) val = static_cast<T>(0);
+            if (std::abs(val - std::round(val)) < static_cast<T>(1e-6)) {
+                return std::to_string(static_cast<long long>(std::round(val)));
+            }
+            std::stringstream ss;
+            ss << std::fixed << std::setprecision(3) << val;
+            return ss.str();
+        };
 
         // varName helper
         auto getVarName = [&](int j) -> std::string {
@@ -269,7 +286,7 @@ public:
             return "w" + std::to_string(j - lp.numVariables + 1);
         };
 
-        // Mark basis variables, free variables
+        // Mark basis variables
         std::vector<bool> isBasis(numTotalVars, false);
         for (int r = 0; r < numConstraints; ++r) {
             isBasis[basis[r]] = true;
@@ -280,91 +297,89 @@ public:
             if (!isBasis[j]) nonBasicVars.push_back(j);
         }
 
-        // Column width calculating
-        std::vector<int> colWidths(numTotalVars, 0);
+        // Calculate max width for variable column
+        int maxVarNameLen = 4;
         for (int j : nonBasicVars) {
-            size_t maxW = 0;
-            std::string name = getVarName(j);
-            
-            // Z
-            T zCoeff = tableau(numConstraints, j);
-            if (std::abs(zCoeff) > EPS) {
-                std::stringstream ss;
-                ss << " + " << std::fixed << std::setprecision(3) << std::abs(zCoeff) << "*" << name;
-                maxW = std::max(maxW, ss.str().length());
-            }
-            // constraints
-            for (int r = 0; r < numConstraints; ++r) {
-                T cCoeff = -tableau(r, j);
-                if (std::abs(cCoeff) > EPS) {
-                    std::stringstream ss;
-                    ss << " + " << std::fixed << std::setprecision(3) << std::abs(cCoeff) << "*" << name;
-                    maxW = std::max(maxW, ss.str().length());
-                }
-            }
-            colWidths[j] = static_cast<int>(maxW);
+            maxVarNameLen = std::max(maxVarNameLen, (int)getVarName(j).length());
         }
-
-        // Print Z
-        T zConst = -tableau(numConstraints, numTotalVars);
+        for (int i = 0; i < numConstraints; ++i) {
+            maxVarNameLen = std::max(maxVarNameLen, (int)getVarName(basis[i]).length());
+        }
+        
+        int constColWidth = 12;
+        int termColWidth = 18;
+        
+        // Calculate "=" column position for alignment
+        int eqPos = 2 + maxVarNameLen + 2;
+        std::string eqSpacing(constColWidth + 1, ' ');
+        
+        // Print Z row
+        // Note: For MAX problems, the tableau stores negated coefficients but NOT the constant term.
+        // So Z_display = tableau_constant + originalObjectiveConstant (no negation needed)
+        T zConst = tableau(numConstraints, numTotalVars) + originalLP.objectiveConstant;
         if (std::abs(zConst) < EPS) zConst = static_cast<T>(0);
 
         bool isPhase1 = (this->numTotalVars == this->lp.numVariables + this->numConstraints + 1);
-        std::stringstream ssZ;
-        ssZ << (isPhase1 ? "(Phase 1) Z" : "Z");
+        std::string zLabel = isPhase1 ? "(Phase 1) Z" : "Z";
 
-        std::cout << "  " << std::left << std::setw(11) << ssZ.str() << " = " 
-                  << std::right << std::setw(8) << zConst;
+        std::cout << "  " << std::left << std::setw(maxVarNameLen + 2) << zLabel;
+        std::cout << eqSpacing.substr(0, eqPos - (2 + maxVarNameLen + 2) + 1) << "= ";
+        std::cout << std::right << std::setw(constColWidth - 2) << formatNum(zConst);
 
         for (int j : nonBasicVars) {
             T coeff = tableau(numConstraints, j);
             if (std::abs(coeff) > EPS) {
-                std::stringstream ssTerm;
-                ssTerm << (coeff > 0 ? " + " : " - ") << std::fixed << std::setprecision(3) << std::abs(coeff) << "*" << getVarName(j);
-                std::cout << std::left << std::setw(colWidths[j] + 2) << ssTerm.str();
+                std::string term = (coeff > 0 ? " + " : " - ") + formatNum(std::abs(coeff)) + "*" + getVarName(j);
+                std::cout << std::left << std::setw(termColWidth) << term;
             } else {
-                if (colWidths[j] > 0) std::cout << std::string(colWidths[j] + 2, ' ');
+                std::cout << std::string(termColWidth, ' ');
             }
         }
-        std::cout << "\n\nSubject to:" << std::endl;
+        std::cout << "\n" << sep << "\n\n";
 
         // Print constraints
+        std::cout << "  Subject to:\n\n";
         for (int i = 0; i < numConstraints; ++i) {
             int basisVarIdx = basis[i];
             T rConst = tableau(i, numTotalVars);
             if (std::abs(rConst) < EPS) rConst = static_cast<T>(0);
 
-            std::cout << "  " << std::left << std::setw(11) << getVarName(basisVarIdx) << " = " 
-                  << std::right << std::setw(8) << rConst;
+            std::cout << "  " << std::left << std::setw(maxVarNameLen + 2) << getVarName(basisVarIdx);
+            std::cout << "= ";
+            std::cout << std::right << std::setw(constColWidth - 2) << formatNum(rConst);
 
             for (int j : nonBasicVars) {
                 T coeff = -tableau(i, j);
                 if (std::abs(coeff) > EPS) {
-                    std::stringstream ssTerm;
-                    ssTerm << (coeff > 0 ? " + " : " - ") << std::fixed << std::setprecision(3) << std::abs(coeff) << "*" << getVarName(j);
-                    std::cout << std::left << std::setw(colWidths[j] + 2) << ssTerm.str();
+                    std::string term = (coeff > 0 ? " + " : " - ") + formatNum(std::abs(coeff)) + "*" + getVarName(j);
+                    std::cout << std::left << std::setw(termColWidth) << term;
                 } else {
-                    if (colWidths[j] > 0) std::cout << std::string(colWidths[j] + 2, ' ');
+                    std::cout << std::string(termColWidth, ' ');
                 }
             }
             std::cout << "\n";
         }
-        std::cout << "===============================================================\n\n";
+        
+        std::cout << "\n" << sep << "\n\n";
     }
 
     SolverStatus runSimplex(PivotRule rule) {
         int cnt = 0;
+        pathHistory.clear();
         while (true) {
-            varCoords.push_back(getCoords());
-            std::cout << "Iteration #" << ++cnt;
+            pathHistory.push_back(getCoords());
+            std::cout << "\n[ Iteration #" << cnt + 1 << " ]\n";
+            ++cnt;
             displayDictionary();
             int pCol = findPivotCol(rule);
             if (pCol == -1) {
+                std::cout << "\n  >> Optimal solution found!\n";
                 return SolverStatus::OPTIMAL;
             }
 
             int pRow = findPivotRow(pCol);
             if (pRow == -1) {
+                std::cout << "\n  >> Problem is unbounded!\n";
                 return SolverStatus::UNBOUNDED;
             }
             pivot(pRow, pCol);
@@ -458,9 +473,10 @@ public:
         }
 
         /*========================== PHASE 2 ========================================*/
-        std::cout << "\n===================================================";
-        std::cout << "\n                    PHASE 2                        ";
-        std::cout << "\n===================================================\n";
+        std::cout << "\n";
+        std::cout << "  " << std::string(60, '=') << "\n";
+        std::cout << "                         PHASE 2 - Tiep tuc giai\n";
+        std::cout << "  " << std::string(60, '=') << "\n\n";
 
         int p2NumConstraints = this->numConstraints - redundantCount;
         this->numTotalVars = orgNumTotalVars; 
@@ -507,41 +523,73 @@ public:
     }
 
     /**
-     * @brief Print solution 
+     * @brief Print solution with clean alignment
      * @param status: LP status from solve
      */
     void printSolution(SolverStatus status) const {
-        std::cout << "\n==================== KẾT LUẬN NGHIỆM =======================\n";
+        int sepLen = 96;  // Wider
+        
+        std::cout << "\n" << std::string(sepLen, '=') << "\n";
+        std::cout << "                                    KET LUAN NGHIEM\n";
+        std::cout << std::string(sepLen, '=') << "\n\n";
         
         if (status == SolverStatus::INFEASIBLE) {
-            std::cout << "Bài toán VÔ NGHIỆM, miền chấp nhận được là miền rỗng\n";
-            std::cout << "============================================================\n";
+            std::cout << "  [VO NGHIEM]\n";
+            std::cout << "  Mien chap nhan duoc la mien rong.\n";
+            std::cout << "\n" << std::string(sepLen, '=') << "\n";
             return;
         }
         
         if (status == SolverStatus::UNBOUNDED) {
-            std::cout << "Bài toán KHÔNG GIỚI NỘI\n";
+            std::cout << "  [KHONG GIOI NOI]\n";
+            std::cout << "  Gia tri ham muc tieu co the tang vo han.\n";
             if (this->originalLP.goal == Goal::MAX) {
-                std::cout << "Giá trị tối ưu: inf" << '\n';
+                std::cout << "  Max Z = +infinity\n";
             } else {
-                std::cout << "Giá trị tối ưu: -inf" << '\n';
+                std::cout << "  Min Z = -infinity\n";
             }
-            std::cout << "============================================================\n";
+            std::cout << "\n" << std::string(sepLen, '=') << "\n";
+            return;
+        }
+        
+        if (status == SolverStatus::CYCLING) {
+            std::cout << "  [XOAY VONG - CYCLING]\n";
+            std::cout << "  Thuat toan bi lap vo han.\n";
+            std::cout << "  Goi y: Su dung Bland's Rule.\n";
+            std::cout << "\n" << std::string(sepLen, '=') << "\n";
             return;
         }
         
         if (status == SolverStatus::RUNNING) {
-            std::cout << "Thuật toán vẫn đang trong trạng thái chạy...\n";
-            std::cout << "============================================================\n";
+            std::cout << "  [DUNG SOM]\n";
+            std::cout << "  Thuat toan dat gioi han so lan lap.\n";
+            std::cout << "\n" << std::string(sepLen, '=') << "\n";
             return;
         }
 
-        std::cout << "Bài toán có NGHIỆM TỐI ƯU:\n\n";
-        std::cout << std::fixed << std::setprecision(3);
+        std::cout << "  [NGHIEM TOI UU]\n\n";
 
+        // Helper: format number - no decimal for integers, 3 decimals for floats
+        auto formatNum = [](T val) -> std::string {
+            if (std::abs(val) < static_cast<T>(1e-9)) val = static_cast<T>(0);
+            if (std::abs(val - std::round(val)) < static_cast<T>(1e-6)) {
+                return std::to_string(static_cast<long long>(std::round(val)));
+            }
+            std::stringstream ss;
+            ss << std::fixed << std::setprecision(3) << val;
+            return ss.str();
+        };
+
+        int maxNameLen = 8;
+        for (int i = 0; i < originalLP.numVariables; ++i) {
+            maxNameLen = std::max(maxNameLen, (int)originalLP.variableNames[i].length());
+        }
+        
+        std::cout << "  Cac gia tri bien:\n\n";
         std::vector<T> xOriginal = getCoords();
         for (int i = 0; i < originalLP.numVariables; ++i) {
-            std::cout << "  * " << std::left << std::setw(8) << originalLP.variableNames[i] << " = " << xOriginal[i] << "\n";
+            std::cout << "    " << std::left << std::setw(maxNameLen) << originalLP.variableNames[i] 
+                      << "  =  " << std::right << std::setw(14) << formatNum(xOriginal[i]) << "\n";
         }
 
         T zOptimal = static_cast<T>(0);
@@ -550,9 +598,27 @@ public:
         }
         zOptimal += originalLP.objectiveConstant;
 
-        std::cout << "\n--> Giá trị tối ưu hàm mục tiêu: " 
-                  << (originalLP.goal == Goal::MAX ? "Max Z" : "Min Z") << " = " << zOptimal << "\n";
-        std::cout << "============================================================\n";
+        std::cout << "\n" << std::string(sepLen, '-') << "\n";
+        std::string zLabel = (originalLP.goal == Goal::MAX ? "Max Z" : "Min Z");
+        std::cout << "  Gia tri toi uu:  " << zLabel << " = " << formatNum(zOptimal) << "\n";
+        std::cout << std::string(sepLen, '=') << "\n";
+    }
+    
+    /**
+     * Output path for GUI visualization
+     * Format: GUI_PATH:x1,y1;x2,y2;...
+     */
+    void printGUIPath() const {
+        std::cout << "\n=== GUI_PATH ===\n";
+        const auto& path = pathHistory.empty() ? varCoords : pathHistory;
+        for (size_t i = 0; i < path.size(); ++i) {
+            for (size_t j = 0; j < path[i].size(); ++j) {
+                std::cout << path[i][j];
+                if (j < path[i].size() - 1) std::cout << ",";
+            }
+            if (i < path.size() - 1) std::cout << ";";
+        }
+        std::cout << "\n";
     }
 };
 #endif

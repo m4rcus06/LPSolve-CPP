@@ -143,18 +143,8 @@ int main(int argc, char* argv[]) {
             // Print solution
             solver.printSolution(status);
             
-            // Get path for visualization
-            vector<vector<double>> path = solver.getPath();
-            
-            cout << "\n=== COORDINATES_PATH ===" << endl;
-            for (const auto& coord : path) {
-                for (int i = 0; i < (int)coord.size(); ++i) {
-                    cout << fixed << setprecision(6) << coord[i];
-                    if (i < (int)coord.size() - 1) cout << ",";
-                }
-                cout << "|";
-            }
-            cout << endl;
+            // Output path for GUI
+            solver.printGUIPath();
             
             cout << "\n=== SOLVER_STATUS ===" << endl;
             switch (status) {

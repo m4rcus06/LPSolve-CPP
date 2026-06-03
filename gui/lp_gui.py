@@ -41,7 +41,7 @@ class DictionaryStepViewer:
         scroll = ttk.Scrollbar(text_frame)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
         
-        self.text_area = tk.Text(text_frame, wrap=tk.WORD, font=("Courier", 10),
+        self.text_area = tk.Text(text_frame, wrap=tk.WORD, font=("Consolas", 13),
                                   yscrollcommand=scroll.set)
         self.text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.config(command=self.text_area.yview)
@@ -126,6 +126,8 @@ class LinearProgrammingGUI:
         self.last_obj_constant = 0
         self._viz_canvas = None
         self.last_dictionaries = []
+        self.current_dict_step = 0
+        self._dict_play_after_id = None
         
         self._setup_styles()
         self._create_widgets()
@@ -222,16 +224,37 @@ class LinearProgrammingGUI:
         self.result_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         result_scroll.config(command=self.result_text.yview)
         
-        # Dictionary tab
+        # Dictionary tab - with navigation buttons and Consolas font
         dict_tab = ttk.Frame(notebook)
         notebook.add(dict_tab, text="Dictionary")
         
-        dict_scroll = ttk.Scrollbar(dict_tab)
-        dict_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        # Navigation frame at top
+        nav_frame = ttk.Frame(dict_tab)
+        nav_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=3)
         
-        self.dict_text = tk.Text(dict_tab, wrap=tk.WORD, font=("Courier", 10), yscrollcommand=dict_scroll.set)
+        self.dict_step_label = ttk.Label(nav_frame, text="Step 0/0", font=("Helvetica", 10))
+        self.dict_step_label.pack(side=tk.LEFT, padx=10)
+        
+        ttk.Button(nav_frame, text="◄ Prev", command=self._dict_prev_step).pack(side=tk.LEFT, padx=2)
+        ttk.Button(nav_frame, text="Next ►", command=self._dict_next_step).pack(side=tk.LEFT, padx=2)
+        ttk.Button(nav_frame, text="Auto Play", command=self._dict_auto_play).pack(side=tk.LEFT, padx=5)
+        
+        # Text area with scrollbars
+        dict_content_frame = ttk.Frame(dict_tab)
+        dict_content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        dict_scroll_y = ttk.Scrollbar(dict_content_frame)
+        dict_scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        dict_scroll_x = ttk.Scrollbar(dict_content_frame, orient=tk.HORIZONTAL)
+        dict_scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        self.dict_text = tk.Text(dict_content_frame, wrap=tk.NONE, font=("Consolas", 13),
+                                xscrollcommand=dict_scroll_x.set, yscrollcommand=dict_scroll_y.set)
         self.dict_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        dict_scroll.config(command=self.dict_text.yview)
+        
+        dict_scroll_x.config(command=self.dict_text.xview)
+        dict_scroll_y.config(command=self.dict_text.yview)
         
         # Visualization tab
         self.viz_frame = ttk.Frame(notebook)
@@ -249,7 +272,6 @@ class LinearProgrammingGUI:
         
         ttk.Button(btn_frame, text="Solve", style="Solve.TButton", command=self._solve).pack(side=tk.LEFT, padx=3)
         ttk.Button(btn_frame, text="Dictionary", style="Custom.TButton", command=self._show_dictionary).pack(side=tk.LEFT, padx=3)
-        ttk.Button(btn_frame, text="Step View", style="Custom.TButton", command=self._open_step_viewer).pack(side=tk.LEFT, padx=3)
         ttk.Button(btn_frame, text="Clear", style="Custom.TButton", command=self._clear).pack(side=tk.LEFT, padx=3)
         ttk.Button(btn_frame, text="Example", style="Custom.TButton", command=self._load_example).pack(side=tk.LEFT, padx=3)
         
@@ -590,6 +612,8 @@ class LinearProgrammingGUI:
             
             self.last_obj_constant = data['obj_constant']
             self._parse_and_display_result(output, data)
+            self.current_dict_step = 0
+            self._update_dict_display()
             self.status_var.set("Solved!")
             
         except FileNotFoundError:
@@ -609,42 +633,90 @@ class LinearProgrammingGUI:
         # Parse and store dictionaries for step viewer
         self._parse_dictionaries(output)
         
-        solution_match = re.search(r'=== KẾT LUẬN NGHIỆM ===.*?(?==== COORDINATES_PATH|=== SOLVER_STATUS|$)', 
-                                   output, re.DOTALL)
+        # Parse solution - just the key info
+        solution_lines = []
         
-        if solution_match:
-            solution_text = solution_match.group().strip()
-            solution_text = re.sub(r'\n{3,}', '\n\n', solution_text)
+        # Check status
+        status_match = re.search(r'=== SOLVER_STATUS ===\s*(\w+)', output)
+        status = status_match.group(1) if status_match else "UNKNOWN"
+        
+        if status == "OPTIMAL":
+            # Extract variable values
+            var_values = {}
+            for match in re.finditer(r'x(\d+)\s*=\s*([-\d.]+)', output):
+                var_values[int(match.group(1))] = match.group(2)
+            
+            # Extract optimal value
+            z_match = re.search(r'(Max|Min)\s*Z\s*=\s*([-\d.]+)', output)
+            z_value = z_match.group(2) if z_match else "?"
+            z_type = z_match.group(1) if z_match else "Z"
+            
+            solution_lines.append("=" * 50)
+            solution_lines.append("          KẾT LUẬN NGHIỆM")
+            solution_lines.append("=" * 50)
+            solution_lines.append("")
+            solution_lines.append("[NGHIỆM TỐI ƯU]")
+            solution_lines.append("")
+            solution_lines.append("Các giá trị biến:")
+            solution_lines.append("")
+            
+            for i in range(1, self.num_vars.get() + 1):
+                val = var_values.get(i, "0")
+                solution_lines.append(f"  x{i}  =  {val}")
+            
+            solution_lines.append("")
+            solution_lines.append("-" * 50)
+            solution_lines.append(f"  Giá trị tối ưu:  {z_type} Z = {z_value}")
+            solution_lines.append("=" * 50)
+            
+        elif status == "INFEASIBLE":
+            solution_lines.append("=" * 50)
+            solution_lines.append("          KẾT LUẬN NGHIỆM")
+            solution_lines.append("=" * 50)
+            solution_lines.append("")
+            solution_lines.append("[VÔ NGHIỆM]")
+            solution_lines.append("")
+            solution_lines.append("Miền chấp nhận được là miền rỗng.")
+            solution_lines.append("=" * 50)
+            
+        elif status == "UNBOUNDED":
+            solution_lines.append("=" * 50)
+            solution_lines.append("          KẾT LUẬN NGHIỆM")
+            solution_lines.append("=" * 50)
+            solution_lines.append("")
+            solution_lines.append("[KHÔNG GIỚI NỘI]")
+            solution_lines.append("")
+            solution_lines.append("Giá trị hàm mục tiêu có thể tăng vô hạn.")
+            solution_lines.append("=" * 50)
+            
         else:
-            solution_text = output
+            solution_lines.append(f"Trạng thái: {status}")
         
-        if self.last_obj_constant != 0:
-            solution_text += f"\n\n[Hệ số tự do] d = {self.last_obj_constant}"
-        
+        solution_text = "\n".join(solution_lines)
         self.result_text.delete(1.0, tk.END)
         self.result_text.insert(1.0, solution_text)
         
-        path_match = re.search(r'=== COORDINATES_PATH ===(.*?)(?==== SOLVER_STATUS|$)', output, re.DOTALL)
-        
+        # Parse path from GUI_PATH output
         self.last_path = []
+        path_match = re.search(r'=== GUI_PATH ===\s*([\d.,;-]+)', output)
         if path_match:
-            path_str = path_match.group(1).strip()
-            for coord_str in path_str.split('|'):
-                coord_str = coord_str.strip()
-                if coord_str:
-                    parts = coord_str.split(',')
-                    if len(parts) >= 2:
-                        try:
-                            x, y = float(parts[0]), float(parts[1])
-                            self.last_path.append((x, y))
-                        except ValueError:
-                            pass
+            path_str = path_match.group(1)
+            for point_str in path_str.split(';'):
+                coords = point_str.strip().split(',')
+                if len(coords) >= 2:
+                    try:
+                        x1 = float(coords[0])
+                        x2 = float(coords[1])
+                        self.last_path.append((x1, x2))
+                    except ValueError:
+                        pass
         
+        # Parse status
         status_match = re.search(r'=== SOLVER_STATUS ===\s*(\w+)', output)
         if status_match:
             self.last_result = status_match.group(1)
         
-        if self.num_vars.get() == 2 and self.last_path:
+        if self.num_vars.get() == 2 and len(self.last_path) >= 1:
             self._show_visualization(data)
         else:
             self._clear_visualization()
@@ -696,9 +768,9 @@ class LinearProgrammingGUI:
             
             # Parse and store dictionaries for step viewer
             self._parse_dictionaries(output)
+            self.current_dict_step = 0
             
-            self.dict_text.delete(1.0, tk.END)
-            self.dict_text.insert(1.0, output)
+            self._update_dict_display()
             self.status_var.set("Dictionary generated!")
             
         except Exception as e:
@@ -709,9 +781,9 @@ class LinearProgrammingGUI:
         """Parse solver output into individual dictionaries"""
         self.last_dictionaries = []
         
-        # Split by "Iteration #N" markers
+        # Split by "[ Iteration #N ]" markers - include the bracket
         import re
-        pattern = r'(Iteration #\d+.*?)(?=Iteration #|\n=== SOLVER_STATUS ===|\Z)'
+        pattern = r'(\[\s*Iteration #\d+\s*\].*?)(?=\[\s*Iteration #|\n=== SOLVER_STATUS ===|\Z)'
         matches = re.findall(pattern, output, re.DOTALL)
         
         if matches:
@@ -720,11 +792,11 @@ class LinearProgrammingGUI:
                 if match:
                     self.last_dictionaries.append(match)
         else:
-            # If no iteration markers, try splitting by "Iteration #"
-            parts = re.split(r'(Iteration #\d+)', output)
+            # If no iteration markers, try splitting by "[ Iteration #"
+            parts = re.split(r'(\[\s*Iteration #\d+)', output)
             current_dict = ""
             for i, part in enumerate(parts):
-                if part.startswith("Iteration #"):
+                if part.startswith("[ Iteration #"):
                     if current_dict:
                         self.last_dictionaries.append(current_dict.strip())
                     current_dict = part
@@ -747,14 +819,78 @@ class LinearProgrammingGUI:
             messagebox.showinfo("Single Step", "Only one iteration. Use the Dictionary tab instead.")
             return
         
-        # Open viewer window
-        DictionaryStepViewer(self.root, self.last_dictionaries)
+        # Switch to Dictionary tab
+        notebook = None
+        for widget in self.root.winfo_children():
+            if isinstance(widget, ttk.PanedWindow):
+                for child in widget.winfo_children():
+                    if isinstance(child, ttk.Frame):
+                        for w in child.winfo_children():
+                            if isinstance(w, ttk.Notebook):
+                                notebook = w
+                                break
+        
+        if notebook:
+            for i, tab_id in enumerate(notebook.tabs()):
+                if notebook.tab(tab_id, "text") == "Dictionary":
+                    notebook.select(i)
+                    break
+        
+        self._update_dict_display()
+            
+    def _dict_prev_step(self):
+        """Go to previous dictionary step"""
+        if not self.last_dictionaries:
+            return
+        self.current_dict_step = max(0, self.current_dict_step - 1)
+        self._update_dict_display()
+        
+    def _dict_next_step(self):
+        """Go to next dictionary step"""
+        if not self.last_dictionaries:
+            return
+        self.current_dict_step = min(len(self.last_dictionaries) - 1, self.current_dict_step + 1)
+        self._update_dict_display()
+        
+    def _dict_auto_play(self):
+        """Auto play through dictionary steps"""
+        if not self.last_dictionaries:
+            return
+        
+        if self._dict_play_after_id:
+            self.root.after_cancel(self._dict_play_after_id)
+            self._dict_play_after_id = None
+            return
+        
+        def play_next():
+            if self.current_dict_step < len(self.last_dictionaries) - 1:
+                self.current_dict_step += 1
+                self._update_dict_display()
+                self._dict_play_after_id = self.root.after(800, play_next)
+            else:
+                self._dict_play_after_id = None
+        
+        play_next()
+        
+    def _update_dict_display(self):
+        """Update dictionary text display for current step"""
+        if not self.last_dictionaries:
+            self.dict_text.delete(1.0, tk.END)
+            self.dict_step_label.config(text="No data")
+            return
+        
+        total = len(self.last_dictionaries)
+        step = self.current_dict_step + 1
+        self.dict_step_label.config(text=f"Step {step}/{total}")
+        
+        self.dict_text.delete(1.0, tk.END)
+        self.dict_text.insert(1.0, self.last_dictionaries[self.current_dict_step])
             
     def _show_visualization(self, data: Dict):
         self._clear_visualization()
         
-        if len(self.last_path) < 2:
-            ttk.Label(self.viz_frame, text="Need at least 2 points to visualize").pack(pady=20)
+        if len(self.last_path) < 1:
+            ttk.Label(self.viz_frame, text="No path points found for visualization").pack(pady=20)
             return
         
         try:
@@ -810,21 +946,22 @@ class LinearProgrammingGUI:
                 path_x = [p[0] for p in self.last_path]
                 path_y = [p[1] for p in self.last_path]
                 
+                # Draw line
+                ax.plot(path_x, path_y, 'r-', linewidth=2, alpha=0.7, zorder=3)
+                
+                # Draw small arrows between points
+                from matplotlib.patches import FancyArrowPatch
                 for i in range(len(path_x) - 1):
-                    ax.annotate('', xy=(path_x[i+1], path_y[i+1]), 
-                               xytext=(path_x[i], path_y[i]),
-                               arrowprops=dict(arrowstyle='->', color='red', lw=2))
+                    arrow = FancyArrowPatch(
+                        (path_x[i], path_y[i]),
+                        (path_x[i+1], path_y[i+1]),
+                        arrowstyle='->', mutation_scale=15,
+                        color='red', linewidth=2, zorder=4
+                    )
+                    ax.add_patch(arrow)
                 
-                ax.scatter(path_x[0], path_y[0], color='green', s=150, marker='o', zorder=5, label='Start')
-                ax.scatter(path_x[1:-1], path_y[1:-1], color='orange', s=100, marker='s', zorder=5, label='Intermediate')
-                
-                if len(path_x) > 1:
-                    ax.scatter(path_x[-1], path_y[-1], color='red', s=200, marker='*', zorder=6, label='Optimal')
-                    ax.annotate(f"({path_x[-1]:.2f}, {path_y[-1]:.2f})", 
-                               xy=(path_x[-1], path_y[-1]),
-                               xytext=(path_x[-1] + 0.5, path_y[-1] + 0.5),
-                               fontsize=10, fontweight='bold',
-                               arrowprops=dict(arrowstyle='->', color='red'))
+                # Markers (small dots)
+                ax.scatter(path_x, path_y, color='red', s=50, zorder=5)
             
             ax.set_xlabel('x₁', fontsize=12)
             ax.set_ylabel('x₂', fontsize=12)
@@ -837,7 +974,7 @@ class LinearProgrammingGUI:
             ax.set_xlim(x_min, x_max)
             ax.set_ylim(y_min, y_max)
             ax.grid(True, alpha=0.3)
-            ax.legend(loc='upper right', fontsize=7)
+            ax.legend(loc='upper right', fontsize=8)
             ax.set_aspect('equal')
             
             canvas = FigureCanvasTkAgg(fig, master=self.viz_frame)
@@ -851,6 +988,7 @@ class LinearProgrammingGUI:
                 opt_value += data['obj_constant']
                 info_text = f"Optimal: x₁ = {opt_point[0]:.3f}, x₂ = {opt_point[1]:.3f}, Z = {opt_value:.3f}"
             else:
+                opt_value = 0
                 info_text = f"Status: {self.last_result}"
                 
             ttk.Label(self.viz_frame, text=info_text, font=("Helvetica", 10, "bold")).pack(pady=5)
