@@ -316,8 +316,13 @@ public:
         std::string eqSpacing(constColWidth + 1, ' ');
         
         // Print Z row
-        // Note: For MAX problems, the tableau stores negated coefficients but NOT the constant term.
-        // So Z_display = tableau_constant + originalObjectiveConstant (no negation needed)
+        // Display the NORMALIZED objective function (c'x' + const'):
+        // For MIN: tableau already has c (not negated), so:
+        //          displayCoeff = tableau_coeff, displayConst = tableau_const + const' - const'
+        // For MAX: tableau has -c (negated), so:
+        //          displayCoeff = -tableau_coeff, displayConst = -(tableau_const + const')
+        // Thus: zDisplay = -(tableau_const + const') for MAX
+        //       zDisplay = (tableau_const + const' - const') = tableau_const for MIN
         T zConst = tableau(numConstraints, numTotalVars) + originalLP.objectiveConstant;
         if (std::abs(zConst) < EPS) zConst = static_cast<T>(0);
 
@@ -326,10 +331,16 @@ public:
 
         std::cout << "  " << std::left << std::setw(maxVarNameLen + 2) << zLabel;
         std::cout << eqSpacing.substr(0, eqPos - (2 + maxVarNameLen + 2) + 1) << "= ";
-        std::cout << std::right << std::setw(constColWidth - 2) << formatNum(zConst);
+        
+        // Tableau stores equation as: Z + c0 + c1*x1 + ... = 0
+        // Display as: Z = -c0 - c1*x1 - ...
+        // Always negate tableau values to show correct dictionary form
+        T displayConst = -tableau(numConstraints, numTotalVars);
+        if (std::abs(displayConst) < EPS) displayConst = static_cast<T>(0);
+        std::cout << std::right << std::setw(constColWidth - 2) << formatNum(displayConst);
 
         for (int j : nonBasicVars) {
-            T coeff = tableau(numConstraints, j);
+            T coeff = -tableau(numConstraints, j);
             if (std::abs(coeff) > EPS) {
                 std::string term = (coeff > 0 ? " + " : " - ") + formatNum(std::abs(coeff)) + "*" + getVarName(j);
                 std::cout << std::left << std::setw(termColWidth) << term;
@@ -388,7 +399,6 @@ public:
             displayDictionary();
             int pCol = findPivotCol(rule);
             if (pCol == -1) {
-                std::cout << "\n  >> Optimal solution found!\n";
                 return SolverStatus::OPTIMAL;
             }
 
@@ -496,10 +506,7 @@ public:
         }
 
         /*========================== PHASE 2 ========================================*/
-        std::cout << "\n";
-        std::cout << "  " << std::string(60, '=') << "\n";
-        std::cout << "                         PHASE 2 - Tiep tuc giai\n";
-        std::cout << "  " << std::string(60, '=') << "\n\n";
+        std::cout << "\n  PHASE 2 - Tiep tuc giai\n\n";
 
         int p2NumConstraints = this->numConstraints - redundantCount;
         this->numTotalVars = orgNumTotalVars; 
@@ -566,16 +573,11 @@ public:
      * @param status: LP status from solve
      */
     void printSolution(SolverStatus status) const {
-        int sepLen = 96;  // Wider
-        
-        std::cout << "\n" << std::string(sepLen, '=') << "\n";
-        std::cout << "                                    KET LUAN NGHIEM\n";
-        std::cout << std::string(sepLen, '=') << "\n\n";
+        std::cout << "\n                              KET LUAN NGHIEM\n\n";
         
         if (status == SolverStatus::INFEASIBLE) {
             std::cout << "  [VO NGHIEM]\n";
-            std::cout << "  Mien chap nhan duoc la mien rong.\n";
-            std::cout << "\n" << std::string(sepLen, '=') << "\n";
+            std::cout << "  Mien chap nhan duoc la mien rong.\n\n";
             return;
         }
         
@@ -587,22 +589,20 @@ public:
             } else {
                 std::cout << "  Min Z = -infinity\n";
             }
-            std::cout << "\n" << std::string(sepLen, '=') << "\n";
+            std::cout << "\n";
             return;
         }
         
         if (status == SolverStatus::CYCLING) {
             std::cout << "  [XOAY VONG - CYCLING]\n";
             std::cout << "  Thuat toan bi lap vo han.\n";
-            std::cout << "  Goi y: Su dung Bland's Rule.\n";
-            std::cout << "\n" << std::string(sepLen, '=') << "\n";
+            std::cout << "  Goi y: Su dung Bland's Rule.\n\n";
             return;
         }
         
         if (status == SolverStatus::RUNNING) {
             std::cout << "  [DUNG SOM]\n";
-            std::cout << "  Thuat toan dat gioi han so lan lap.\n";
-            std::cout << "\n" << std::string(sepLen, '=') << "\n";
+            std::cout << "  Thuat toan dat gioi han so lan lap.\n\n";
             return;
         }
 
@@ -637,10 +637,8 @@ public:
         }
         zOptimal += originalLP.objectiveConstant;
 
-        std::cout << "\n" << std::string(sepLen, '-') << "\n";
         std::string zLabel = (originalLP.goal == Goal::MAX ? "Max Z" : "Min Z");
-        std::cout << "  Gia tri toi uu:  " << zLabel << " = " << formatNum(zOptimal) << "\n";
-        std::cout << std::string(sepLen, '=') << "\n";
+        std::cout << "\n  Gia tri toi uu:  " << zLabel << " = " << formatNum(zOptimal) << "\n\n";
     }
     
     /**

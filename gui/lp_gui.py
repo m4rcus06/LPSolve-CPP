@@ -651,11 +651,7 @@ class LinearProgrammingGUI:
             z_value = z_match.group(2) if z_match else "?"
             z_type = z_match.group(1) if z_match else "Z"
             
-            solution_lines.append("=" * 50)
-            solution_lines.append("          KẾT LUẬN NGHIỆM")
-            solution_lines.append("=" * 50)
-            solution_lines.append("")
-            solution_lines.append("[NGHIỆM TỐI ƯU]")
+            solution_lines.append(f"[NGHIỆM TỐI ƯU]\n")
             solution_lines.append("")
             solution_lines.append("Các giá trị biến:")
             solution_lines.append("")
@@ -665,29 +661,17 @@ class LinearProgrammingGUI:
                 solution_lines.append(f"  x{i}  =  {val}")
             
             solution_lines.append("")
-            solution_lines.append("-" * 50)
             solution_lines.append(f"  Giá trị tối ưu:  {z_type} Z = {z_value}")
-            solution_lines.append("=" * 50)
             
         elif status == "INFEASIBLE":
-            solution_lines.append("=" * 50)
-            solution_lines.append("          KẾT LUẬN NGHIỆM")
-            solution_lines.append("=" * 50)
-            solution_lines.append("")
             solution_lines.append("[VÔ NGHIỆM]")
             solution_lines.append("")
             solution_lines.append("Miền chấp nhận được là miền rỗng.")
-            solution_lines.append("=" * 50)
             
         elif status == "UNBOUNDED":
-            solution_lines.append("=" * 50)
-            solution_lines.append("          KẾT LUẬN NGHIỆM")
-            solution_lines.append("=" * 50)
-            solution_lines.append("")
             solution_lines.append("[KHÔNG GIỚI NỘI]")
             solution_lines.append("")
             solution_lines.append("Giá trị hàm mục tiêu có thể tăng vô hạn.")
-            solution_lines.append("=" * 50)
             
         else:
             solution_lines.append(f"Trạng thái: {status}")
@@ -966,9 +950,21 @@ class LinearProgrammingGUI:
             ax.set_xlabel('x₁', fontsize=12)
             ax.set_ylabel('x₂', fontsize=12)
             
-            goal_str = "Maximize" if data['goal'] == 'MAX' else "Minimize"
+            # Build objective string with proper sign handling (like C++ linear_program.h)
+            obj_parts = []
+            for i, c in enumerate(data['obj']):
+                if i == 0:
+                    if c < 0:
+                        obj_parts.append(f"- {-c}x{i+1}")
+                    else:
+                        obj_parts.append(f"{c}x{i+1}")
+                else:
+                    if c >= 0:
+                        obj_parts.append(f"+ {c}x{i+1}")
+                    else:
+                        obj_parts.append(f"- {-c}x{i+1}")
+            obj_str = " ".join(obj_parts)
             const_str = f" + {data['obj_constant']}" if data['obj_constant'] != 0 else ""
-            obj_str = " + ".join([f"{c}x{i+1}" for i, c in enumerate(data['obj'])])
             ax.set_title(f'{goal_str} Z = {obj_str}{const_str}', fontsize=11)
             
             ax.set_xlim(x_min, x_max)
