@@ -1,0 +1,234 @@
+================================================================================
+                    TECHNOLOGIES & REQUIREMENTS
+                         Linear Programming Solver
+================================================================================
+
+PROJECT OVERVIEW
+--------------------------------------------------------------------------------
+Hybrid desktop application combining C++ (high-performance solver) and Python
+(GUI and visualization) to solve General Linear Programming problems using
+the Two-Phase Simplex Method.
+
+================================================================================
+                              C++ COMPONENT
+================================================================================
+
+LANGUAGE VERSION
+--------------------------------------------------------------------------------
+C++17 (ISO/IEC 14882:2017)
+
+COMPILER
+--------------------------------------------------------------------------------
+- GCC (GNU Compiler Collection) 7.0 or later
+- MinGW-w64 (Minimalist GNU for Windows) - Recommended for Windows
+- MSYS2 with mingw-w64-gcc package - Alternative for Windows
+- Clang 6.0+ - Alternative compiler
+
+COMPILER FLAGS
+--------------------------------------------------------------------------------
+  g++ -std=c++17 -I src/include src/LPInterface.cpp -o src/LPInterface
+
+STANDARD LIBRARIES (Built-in)
+--------------------------------------------------------------------------------
+- <iostream>    - Input/output streams
+- <iomanip>     - Output formatting (setw, setprecision)
+- <vector>      - Dynamic arrays
+- <string>      - String manipulation
+- <cmath>       - Mathematical functions (abs, sqrt)
+- <algorithm>   - Algorithm utilities (min, max)
+- <sstream>     - String stream parsing
+- <stdexcept>   - Exception classes
+- <limits>      - Numeric limits
+
+SOURCE FILES
+--------------------------------------------------------------------------------
+src/
+  LPInterface.cpp           Main entry point, CLI argument parsing, solver wrapper
+  include/
+    matrix.h                Template-based matrix class with operations
+    linear_program.h        LinearProgram struct definition
+    LPSolver.h              Two-Phase Simplex algorithm implementation
+
+================================================================================
+                              PYTHON COMPONENT
+================================================================================
+
+LANGUAGE VERSION
+--------------------------------------------------------------------------------
+Python 3.7+ (Recommended: Python 3.11 or later)
+
+EXTERNAL LIBRARIES
+--------------------------------------------------------------------------------
+
+1. NumPy
+   -----
+   Version:  >= 1.21.0
+   Purpose:  Numerical computing, array operations for constraint matrix
+   Install:  pip install numpy
+
+   Usage in project:
+   - Matrix representation of constraints (A, b)
+   - Array operations for visualization
+   - Meshgrid generation for 2D plots
+
+2. Matplotlib
+   ------------
+   Version:  >= 3.4.0
+   Purpose:  Data visualization, constraint region plotting
+   Backend:  TkAgg (Tkinter-compatible)
+   Install:  pip install matplotlib
+
+   Usage in project:
+   - 2D constraint region visualization
+   - Path plotting (simplex iterations)
+   - Optimal point marking
+
+3. Tkinter (Built-in)
+   ------------------
+   Version:  Comes with Python (tkinter/tk)
+   Purpose:  GUI framework for desktop interface
+   Install:  Usually included with Python installation
+
+   Usage in project:
+   - Main application window
+   - Input forms for LP parameters
+   - Buttons, labels, dropdowns
+   - Text display for results
+
+================================================================================
+                              BUILD TOOLS
+================================================================================
+
+BATCH SCRIPTS
+--------------------------------------------------------------------------------
+
+1. install.bat
+   Purpose:  Install dependencies and compile C++ solver
+   Actions:
+   - Detect Python installation
+   - Install numpy, matplotlib if missing
+   - Compile LPInterface.exe using g++
+   - Verify compilation success
+
+2. LPSolver.bat
+   Purpose:  Main launcher script
+   Actions:
+   - Run install.bat if solver not found
+   - Launch Python GUI (gui/lp_gui.py)
+
+================================================================================
+                              PROJECT STRUCTURE
+================================================================================
+
+myProject/
+  |
+  +-- LPSolver.bat              [Main launcher - Double-click to run]
+  +-- install.bat               [Install & compile script]
+  +-- README.md                 [Documentation]
+  |
+  +-- gui/
+  |     +-- lp_gui.py          [Python GUI application]
+  |     +-- requirements.txt   [Python dependencies list]
+  |
+  +-- src/
+  |     +-- LPInterface.cpp     [C++ main program]
+  |     +-- include/
+  |           +-- matrix.h      [Matrix class template]
+  |           +-- linear_program.h [LP data structures]
+  |           +-- LPSolver.h    [Simplex algorithm]
+  |
+  +-- testing/                   [Unit tests]
+
+================================================================================
+                              SYSTEM REQUIREMENTS
+================================================================================
+
+MINIMUM REQUIREMENTS
+--------------------------------------------------------------------------------
+- OS:           Windows 10/11 or Linux with GCC
+- RAM:          4 GB
+- Disk Space:   100 MB free
+- Display:      1024x768 resolution
+
+RECOMMENDED REQUIREMENTS
+--------------------------------------------------------------------------------
+- OS:           Windows 10/11 64-bit
+- RAM:          8 GB
+- Disk Space:   200 MB free
+- Display:      1920x1080 resolution
+
+================================================================================
+                              VERSION COMPATIBILITY
+================================================================================
+
+TESTED CONFIGURATIONS
+--------------------------------------------------------------------------------
+
+| Configuration          | Status  | Notes                        |
+|-----------------------|---------|------------------------------|
+| Python 3.11 + GCC 13  | OK      | Latest stable                |
+| Python 3.10 + GCC 11  | OK      | Good compatibility            |
+| Python 3.9 + GCC 10   | OK      | Works well                   |
+| Python 3.8 + GCC 9    | OK      | Minimal version               |
+
+================================================================================
+                              INSTALLATION COMMANDS
+================================================================================
+
+WINDOWS (Command Prompt or PowerShell)
+--------------------------------------------------------------------------------
+  1. Install Python:
+     Download from https://python.org
+     Run installer, CHECK "Add Python to PATH"
+
+  2. Install GCC (MinGW-w64):
+     Download from https://www.mingw-w64.org/
+     OR use MSYS2: https://www.msys2.org/
+     Command: pacman -S mingw-w64-gcc
+
+  3. Install Python packages:
+     pip install numpy matplotlib
+
+  4. Compile solver:
+     g++ -std=c++17 -I src/include src/LPInterface.cpp -o src/LPInterface
+
+LINUX (Debian/Ubuntu)
+--------------------------------------------------------------------------------
+  1. Install Python and pip:
+     sudo apt update
+     sudo apt install python3 python3-pip
+
+  2. Install GCC:
+     sudo apt install g++
+
+  3. Install Python packages:
+     pip3 install numpy matplotlib
+
+  4. Compile solver:
+     g++ -std=c++17 -I src/include src/LPInterface.cpp -o src/LPInterface
+
+================================================================================
+                              NOTES
+================================================================================
+
+1. The C++ solver must be compiled BEFORE running the Python GUI
+2. On Windows, the executable is named LPInterface.exe
+3. On Linux/Mac, the executable is named LPInterface
+4. Python GUI automatically detects the correct executable path
+5. For large problems (>10 variables, >10 constraints), ensure adequate RAM
+
+================================================================================
+                              CHANGELOG
+================================================================================
+
+v1.0 (Current)
+- Two-Phase Simplex Method implementation
+- GUI with Tkinter
+- 2D visualization with Matplotlib
+- Support for: MAX/MIN, <=, >=, = constraints
+- Support for: >=0, <=0, Free variables
+- Pivot rules: Dantzig and Bland
+- Dictionary step-by-step viewer
+- Path visualization for 2-variable problems
+
+================================================================================

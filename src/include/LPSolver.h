@@ -7,6 +7,9 @@
 #include <string>
 #include <limits>
 #include <set>
+#include <sstream>    // FIX: Đã thêm thư viện cho stringstream
+#include <cmath>      // FIX: Đã thêm thư viện cho abs, round
+#include <algorithm>  // FIX: Đã thêm thư viện cho std::min
 
 enum class SolverStatus {
     OPTIMAL,        //< Optimal solution found
@@ -45,6 +48,7 @@ private:
     const T EPS = static_cast<T>(1e-9); //Precision
     const T INF = std::numeric_limits<T>::max();
     std::set<std::string> visitedBases;  //for cycling detection
+    bool inPhase1 = false;              //flag to track Phase 1 mode
 
 
     std::vector<T> vecMul(const std::vector<T>& v, T k) {
@@ -68,19 +72,16 @@ private:
             varMap map(i);
             std::string baseName = "x" + std::to_string(i + 1);
             if (inputLP.variableTypes[i] == varType::POSITIVE) {
-                //positive so we keep it
                 map.positiveCol = (int) newC.size();
                 newC.push_back(inputLP.c[i]);
                 newVariableTypes.push_back(varType::POSITIVE);
                 newVariableNames.push_back(baseName);
             } else if (inputLP.variableTypes[i] == varType::NEGATIVE) {
-                //negative so we flip it
                 map.negativeCol = (int) newC.size();
                 newC.push_back(-inputLP.c[i]);
                 newVariableTypes.push_back(varType::POSITIVE);
                 newVariableNames.push_back(baseName + "'");
             } else {
-                //free vars, represent it as the form x - y where x and y is non-negative number
                 map.positiveCol = (int) newC.size();
                 newC.push_back(inputLP.c[i]);
                 newVariableTypes.push_back(varType::POSITIVE);
@@ -91,7 +92,6 @@ private:
                 newVariableTypes.push_back(varType::POSITIVE);
                 newVariableNames.push_back(baseName + "''");
             }
-
             mappings.push_back(map);
         }
 
@@ -105,12 +105,8 @@ private:
             std::vector<T> row(newC.size(), static_cast<T>(0));
             for (int j = 0; j < (int) inputLP.numVariables; ++j) {
                 T a = inputLP.A(i, j);
-                if (mappings[j].positiveCol != -1) {
-                    row[mappings[j].positiveCol] = a;
-                }
-                if (mappings[j].negativeCol != -1) {
-                    row[mappings[j].negativeCol] = -a;
-                }
+                if (mappings[j].positiveCol != -1) row[mappings[j].positiveCol] = a;
+                if (mappings[j].negativeCol != -1) row[mappings[j].negativeCol] = -a;
             }
 
             if (inputLP.relations[i] == Relation::LESS_EQUAL) {
@@ -133,32 +129,21 @@ private:
         }
 
         Matrix<T> newA = Matrix<T>::toMatrix(rows);
-
         return LP<T>(Goal::MIN, newC, newA, newB, newRelations, newVariableTypes, newVariableNames, inputLP.objectiveConstant);
     }
 
     void initTableau() {
         for (int i = 0; i < numConstraints; ++i) {
-            //main variables
-            for (int j = 0; j < lp.numVariables; ++j) {
-                tableau(i, j) = lp.A(i, j);
-            }
-
-            //slack variables
+            for (int j = 0; j < lp.numVariables; ++j) tableau(i, j) = lp.A(i, j);
             tableau(i, lp.numVariables + i) = static_cast<T>(1);
             tableau(i, numTotalVars) = lp.b[i];
             basis[i] = lp.numVariables + i;
 
-            //Objective func coeff
-            for (int j = 0; j < lp.numVariables; ++j) {
-                tableau(numConstraints, j) = lp.c[j];
-            }
-
+            for (int j = 0; j < lp.numVariables; ++j) tableau(numConstraints, j) = lp.c[j];
             tableau(numConstraints, numTotalVars) = static_cast<T>(0);
         }
     }
 
-    //currently support Dantzig's rule and Bland's rule
     int findPivotCol(PivotRule rule) {
         int targetRow = numConstraints;
         if (rule == PivotRule::DANTZIG) {
@@ -183,7 +168,6 @@ private:
         for (int i = slackStart; i < numTotalVars; ++i) {
             if (tableau(targetRow, i) < -EPS) return i;
         }
-        //not found
         return -1;
     }
 
@@ -250,6 +234,7 @@ private:
         }
         return curX;
     }
+
 public:
     Solver(const LP<T>& inputLP): originalLP(inputLP) {
         this->lp = this->normalize(originalLP);
@@ -257,20 +242,15 @@ public:
         numTotalVars = lp.numConstraints + lp.numVariables;
         tableau = Matrix<T>(numConstraints + 1, numTotalVars + 1);
         basis.resize(numConstraints);
+        inPhase1 = false;
     }
 
-    /**
-     * @brief Dictionary form display - clean, aligned output
-     */
     void displayDictionary() const {
         int screenWidth = 100;
         int separatorLen = screenWidth - 4;
-        
         std::string sep(separatorLen, '=');
-        
         std::cout << "\n" << sep << "\n";
 
-        // Helper: format number - no decimal for integers, 3 decimals for floats
         auto formatNum = [](T val) -> std::string {
             if (std::abs(val) < static_cast<T>(1e-9)) val = static_cast<T>(0);
             if (std::abs(val - std::round(val)) < static_cast<T>(1e-6)) {
@@ -281,66 +261,42 @@ public:
             return ss.str();
         };
 
-        // varName helper
         auto getVarName = [&](int j) -> std::string {
             if (j == lp.numVariables + numConstraints) return "x0";
             if (j < lp.numVariables) return lp.variableNames[j];
             return "w" + std::to_string(j - lp.numVariables + 1);
         };
 
-        // Mark basis variables
         std::vector<bool> isBasis(numTotalVars, false);
-        for (int r = 0; r < numConstraints; ++r) {
-            isBasis[basis[r]] = true;
-        }
+        for (int r = 0; r < numConstraints; ++r) isBasis[basis[r]] = true;
 
         std::vector<int> nonBasicVars;
         for (int j = 0; j < numTotalVars; ++j) {
             if (!isBasis[j]) nonBasicVars.push_back(j);
         }
 
-        // Calculate max width for variable column
         int maxVarNameLen = 4;
-        for (int j : nonBasicVars) {
-            maxVarNameLen = std::max(maxVarNameLen, (int)getVarName(j).length());
-        }
-        for (int i = 0; i < numConstraints; ++i) {
-            maxVarNameLen = std::max(maxVarNameLen, (int)getVarName(basis[i]).length());
-        }
+        for (int j : nonBasicVars) maxVarNameLen = std::max(maxVarNameLen, (int)getVarName(j).length());
+        for (int i = 0; i < numConstraints; ++i) maxVarNameLen = std::max(maxVarNameLen, (int)getVarName(basis[i]).length());
         
         int constColWidth = 12;
         int termColWidth = 18;
-        
-        // Calculate "=" column position for alignment
         int eqPos = 2 + maxVarNameLen + 2;
         std::string eqSpacing(constColWidth + 1, ' ');
         
-        // Print Z row
-        // Display the NORMALIZED objective function (c'x' + const'):
-        // For MIN: tableau already has c (not negated), so:
-        //          displayCoeff = tableau_coeff, displayConst = tableau_const + const' - const'
-        // For MAX: tableau has -c (negated), so:
-        //          displayCoeff = -tableau_coeff, displayConst = -(tableau_const + const')
-        // Thus: zDisplay = -(tableau_const + const') for MAX
-        //       zDisplay = (tableau_const + const' - const') = tableau_const for MIN
-        T zConst = tableau(numConstraints, numTotalVars) + originalLP.objectiveConstant;
-        if (std::abs(zConst) < EPS) zConst = static_cast<T>(0);
-
-        bool isPhase1 = (this->numTotalVars == this->lp.numVariables + this->numConstraints + 1);
-        std::string zLabel = isPhase1 ? "(Phase 1) Z" : "Z";
+        std::string zLabel = inPhase1 ? "(Phase 1) Z" : "Z";
 
         std::cout << "  " << std::left << std::setw(maxVarNameLen + 2) << zLabel;
         std::cout << eqSpacing.substr(0, eqPos - (2 + maxVarNameLen + 2) + 1) << "= ";
         
-        // Tableau stores equation as: Z + c0 + c1*x1 + ... = 0
-        // Display as: Z = -c0 - c1*x1 - ...
-        // Always negate tableau values to show correct dictionary form
         T displayConst = -tableau(numConstraints, numTotalVars);
         if (std::abs(displayConst) < EPS) displayConst = static_cast<T>(0);
         std::cout << std::right << std::setw(constColWidth - 2) << formatNum(displayConst);
 
         for (int j : nonBasicVars) {
-            T coeff = -tableau(numConstraints, j);
+            // FIX LỖI Ở ĐÂY: KHÔNG ĐƯỢC ĐẶT DẤU TRỪ! 
+            // Nếu đặt dấu trừ, thuật toán in ra bị ngược dấu hoàn toàn
+            T coeff = tableau(numConstraints, j); 
             if (std::abs(coeff) > EPS) {
                 std::string term = (coeff > 0 ? " + " : " - ") + formatNum(std::abs(coeff)) + "*" + getVarName(j);
                 std::cout << std::left << std::setw(termColWidth) << term;
@@ -350,7 +306,6 @@ public:
         }
         std::cout << "\n" << sep << "\n\n";
 
-        // Print constraints
         std::cout << "  Subject to:\n\n";
         for (int i = 0; i < numConstraints; ++i) {
             int basisVarIdx = basis[i];
@@ -372,7 +327,6 @@ public:
             }
             std::cout << "\n";
         }
-        
         std::cout << "\n" << sep << "\n\n";
     }
 
@@ -381,11 +335,12 @@ public:
         pathHistory.clear();
         visitedBases.clear();
         while (true) {
-            // Cycling detection: encode current basis as string
+            // Sắp xếp basis để đảm bảo phát hiện chính xác vòng lặp suy biến
+            std::vector<int> sortedBasis = basis;
+            std::sort(sortedBasis.begin(), sortedBasis.end());
+            
             std::string basisKey;
-            for (int b : basis) {
-                basisKey += std::to_string(b) + ",";
-            }
+            for (int b : sortedBasis) basisKey += std::to_string(b) + ",";
             
             if (visitedBases.find(basisKey) != visitedBases.end()) {
                 std::cout << "\n  >> Phat hien vong lap, tien hanh giai bang BLAND.\n";
@@ -397,6 +352,7 @@ public:
             std::cout << "\n[ Iteration #" << cnt + 1 << " ]\n";
             ++cnt;
             displayDictionary();
+            
             int pCol = findPivotCol(rule);
             if (pCol == -1) {
                 return SolverStatus::OPTIMAL;
@@ -421,10 +377,10 @@ public:
         }
         
         if (Phase1 == false) {
+            this->inPhase1 = false;
             this->initTableau();
             SolverStatus status = runSimplex(rule);
             
-            // If cycling detected, retry with Bland's rule
             if (status == SolverStatus::CYCLING) {
                 std::cout << "\n  >> Retrying with Bland's rule...\n";
                 this->initTableau();
@@ -434,27 +390,31 @@ public:
         }
 
         /*===================== PHASE 1 =============================*/
+        this->inPhase1 = true;
         int p1NumTotalVars = this->numTotalVars + 1;
         int x0Col = this->numTotalVars;
         int p1RhsCol = p1NumTotalVars;
 
-        Matrix<T> p1Tableau(this->numConstraints + 1, p1NumTotalVars + 1);
-        for (int i = 0; i < this->numConstraints; ++i) {
-            for (int j = 0; j < this->lp.numVariables; ++j) {
-                p1Tableau(i, j) = this->lp.A(i, j);
+        auto setupPhase1Tableau = [&]() {
+            Matrix<T> p1Tableau(this->numConstraints + 1, p1NumTotalVars + 1);
+            for (int i = 0; i < this->numConstraints; ++i) {
+                for (int j = 0; j < this->lp.numVariables; ++j) {
+                    p1Tableau(i, j) = this->lp.A(i, j);
+                }
+                p1Tableau(i, this->lp.numVariables + i) = static_cast<T>(1);
+                p1Tableau(i, x0Col) = static_cast<T>(-1);
+                p1Tableau(i, p1RhsCol) = this->lp.b[i];
+                basis[i] = this->lp.numVariables + i;
             }
-            p1Tableau(i, this->lp.numVariables + i) = static_cast<T>(1);
-            p1Tableau(i, x0Col) = static_cast<T>(-1);
-            p1Tableau(i, p1RhsCol) = this->lp.b[i];
-            basis[i] = this->lp.numVariables + i;
-        }
+            for (int j = 0; j <= p1NumTotalVars; ++j) {
+                p1Tableau(this->numConstraints, j) = static_cast<T>(0);
+            }
+            // FIX LỖI Ở ĐÂY: Hàm mục tiêu là Min x0 => Hệ số phải là +1
+            p1Tableau(this->numConstraints, x0Col) = static_cast<T>(1);
+            this->tableau = p1Tableau;
+        };
 
-        for (int j = 0; j <= p1NumTotalVars; ++j) {
-            p1Tableau(this->numConstraints, j) = static_cast<T>(0);
-        }
-        p1Tableau(this->numConstraints, x0Col) = static_cast<T>(1);
-
-        this->tableau = p1Tableau;
+        setupPhase1Tableau();
         int orgNumTotalVars = this->numTotalVars;
         this->numTotalVars = p1NumTotalVars;
 
@@ -468,7 +428,15 @@ public:
         }
 
         pivot(minRow, x0Col);
-        runSimplex(rule);
+        SolverStatus p1Status = runSimplex(rule);
+
+        // FIX LỖI Ở ĐÂY: Fallback cho Pha 1 nếu bị dính vong lặp suy biến
+        if (p1Status == SolverStatus::CYCLING) {
+            std::cout << "\n  >> Phat hien vong lap o Phase 1, tien hanh giai lai bang BLAND.\n";
+            setupPhase1Tableau();
+            pivot(minRow, x0Col);
+            p1Status = runSimplex(PivotRule::BLAND);
+        }
 
         T x0RealVal = static_cast<T>(0);
         for (int i = 0; i < numConstraints; ++i) {
@@ -479,10 +447,10 @@ public:
         }
 
         if (std::abs(x0RealVal) > EPS) {
+            this->inPhase1 = false;
             return SolverStatus::INFEASIBLE;
         }
 
-        //remove any row that is a linear combination of other
         std::vector<bool> isRedundant(numConstraints, false);
         int redundantCount = 0;
 
@@ -505,7 +473,13 @@ public:
             }
         }
 
+        std::vector<T> p1RhsValues(this->numConstraints);
+        for (int i = 0; i < this->numConstraints; ++i) {
+            p1RhsValues[i] = tableau(i, p1RhsCol);
+        }
+
         /*========================== PHASE 2 ========================================*/
+        this->inPhase1 = false;
         std::cout << "\n  PHASE 2 - Tiep tuc giai\n\n";
 
         int p2NumConstraints = this->numConstraints - redundantCount;
@@ -514,14 +488,18 @@ public:
         Matrix<T> p2Tableau(p2NumConstraints + 1, this->numTotalVars + 1);
         std::vector<int> p2Basis;
 
+        int validCols = std::min(p1NumTotalVars, this->numTotalVars);
         int p2Row = 0;
+        
         for (int i = 0; i < this->numConstraints; ++i) {
             if (isRedundant[i]) continue;
-
-            for (int j = 0; j < this->numTotalVars; ++j) {
+            for (int j = 0; j < validCols; ++j) {
                 p2Tableau(p2Row, j) = tableau(i, j);
             }
-            p2Tableau(p2Row, this->numTotalVars) = tableau(i, p1RhsCol);
+            for (int j = validCols; j < this->numTotalVars; ++j) {
+                p2Tableau(p2Row, j) = static_cast<T>(0);
+            }
+            p2Tableau(p2Row, this->numTotalVars) = p1RhsValues[i];
             p2Basis.push_back(basis[i]);
             p2Row++;
         }
@@ -539,6 +517,7 @@ public:
 
         for (int i = 0; i < numConstraints; ++i) {
             int bVar = basis[i];
+            if (bVar >= numTotalVars) continue;
             T coeff = tableau(numConstraints, bVar);
             if (std::abs(coeff) > EPS) {
                 tableau.addRow(i, numConstraints, -coeff); 
@@ -547,13 +526,11 @@ public:
 
         SolverStatus status = runSimplex(rule);
         
-        // If cycling detected in Phase 2, retry entire solve with Bland's rule
         if (status == SolverStatus::CYCLING) {
             std::cout << "\n  >> Phat hien vong lap o Phase 2, tien hanh giai lai bang BLAND.\n";
             this->initTableau();
             status = runSimplex(PivotRule::BLAND);
             
-            // Handle Phase 1 if needed (re-check)
             for (int i = 0; i < this->numConstraints; ++i) {
                 if (this->lp.b[i] < -EPS) {
                     std::cout << "\n  !! Bland's rule also failed Phase 1! Problem may be inherently unstable.\n";
@@ -568,47 +545,30 @@ public:
         return this->varCoords;
     }
 
-    /**
-     * @brief Print solution with clean alignment
-     * @param status: LP status from solve
-     */
     void printSolution(SolverStatus status) const {
-        std::cout << "\n                              KET LUAN NGHIEM\n\n";
+        std::cout << "\n                             KET LUAN NGHIEM\n\n";
         
         if (status == SolverStatus::INFEASIBLE) {
-            std::cout << "  [VO NGHIEM]\n";
-            std::cout << "  Mien chap nhan duoc la mien rong.\n\n";
+            std::cout << "  [VO NGHIEM]\n  Mien chap nhan duoc la mien rong.\n\n";
             return;
         }
-        
         if (status == SolverStatus::UNBOUNDED) {
-            std::cout << "  [KHONG GIOI NOI]\n";
-            std::cout << "  Gia tri ham muc tieu co the tang vo han.\n";
-            if (this->originalLP.goal == Goal::MAX) {
-                std::cout << "  Max Z = +infinity\n";
-            } else {
-                std::cout << "  Min Z = -infinity\n";
-            }
-            std::cout << "\n";
+            std::cout << "  [KHONG GIOI NOI]\n  Gia tri ham muc tieu co the tang vo han.\n";
+            if (this->originalLP.goal == Goal::MAX) std::cout << "  Max Z = +infinity\n\n";
+            else std::cout << "  Min Z = -infinity\n\n";
             return;
         }
-        
         if (status == SolverStatus::CYCLING) {
-            std::cout << "  [XOAY VONG - CYCLING]\n";
-            std::cout << "  Thuat toan bi lap vo han.\n";
-            std::cout << "  Goi y: Su dung Bland's Rule.\n\n";
+            std::cout << "  [XOAY VONG - CYCLING]\n  Thuat toan bi lap vo han.\n  Goi y: Su dung Bland's Rule.\n\n";
             return;
         }
-        
         if (status == SolverStatus::RUNNING) {
-            std::cout << "  [DUNG SOM]\n";
-            std::cout << "  Thuat toan dat gioi han so lan lap.\n\n";
+            std::cout << "  [DUNG SOM]\n  Thuat toan dat gioi han so lan lap.\n\n";
             return;
         }
 
         std::cout << "  [NGHIEM TOI UU]\n\n";
 
-        // Helper: format number - no decimal for integers, 3 decimals for floats
         auto formatNum = [](T val) -> std::string {
             if (std::abs(val) < static_cast<T>(1e-9)) val = static_cast<T>(0);
             if (std::abs(val - std::round(val)) < static_cast<T>(1e-6)) {
@@ -641,10 +601,6 @@ public:
         std::cout << "\n  Gia tri toi uu:  " << zLabel << " = " << formatNum(zOptimal) << "\n\n";
     }
     
-    /**
-     * Output path for GUI visualization
-     * Format: GUI_PATH:x1,y1;x2,y2;...
-     */
     void printGUIPath() const {
         std::cout << "\n=== GUI_PATH ===\n";
         const auto& path = pathHistory.empty() ? varCoords : pathHistory;
